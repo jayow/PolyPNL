@@ -622,14 +622,14 @@ export function normalizeTrade(trade: PolymarketTrade, userAddress: string): Nor
                  '0';
 
   // Extract price and size
-  const price = typeof trade.price === 'number' ? trade.price : parseFloat(trade.price?.toString() || '0');
-  const size = typeof trade.size === 'number' ? trade.size : parseFloat(trade.size?.toString() || '0');
+  const price = typeof trade.price === 'number' ? trade.price : parseFloat(String(trade.price || '0'));
+  const size = typeof trade.size === 'number' ? trade.size : parseFloat(String(trade.size || '0'));
 
   // Calculate notional
   const notional = price * size;
 
   // Extract fees
-  const fees = typeof trade.fees === 'number' ? trade.fees : parseFloat(trade.fees?.toString() || '0');
+  const fees = typeof trade.fees === 'number' ? trade.fees : parseFloat(String(trade.fees || '0'));
 
   // Determine side
   const side: 'BUY' | 'SELL' = trade.side?.toUpperCase() === 'SELL' ? 'SELL' : 'BUY';

@@ -6,6 +6,7 @@ import Toolbar from '@/components/Toolbar';
 import SummaryCards from '@/components/SummaryCards';
 import Table from '@/components/Table';
 import DetailsPanel from '@/components/DetailsPanel';
+import PnLGraph from '@/components/PnLGraph';
 
 export default function Home() {
   const [wallet, setWallet] = useState('');
@@ -247,6 +248,13 @@ export default function Home() {
               <>
                 {/* Summary Cards */}
                 {summary && <SummaryCards summary={summary} />}
+
+                {/* PnL Graph */}
+                {positions.length > 0 && (
+                  <div className="mb-2">
+                    <PnLGraph positions={filteredPositions} />
+                  </div>
+                )}
 
                 {/* Results Count */}
                 <div className="text-[10px] text-hyper-textSecondary mb-1 px-1">
