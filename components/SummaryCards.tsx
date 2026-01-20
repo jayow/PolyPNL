@@ -42,7 +42,7 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
       <div className="bg-hyper-panel border border-hyper-border rounded p-2">
         <div className="text-[10px] text-hyper-textSecondary mb-0.5">Total PnL</div>
         <div className={`text-sm font-mono-numeric font-medium ${
-          summary.totalRealizedPnL >= 0 ? 'text-hyper-positive' : 'text-hyper-negative'
+          summary.totalRealizedPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
         }`}>
           ${formatNumber(summary.totalRealizedPnL)}
         </div>
@@ -58,7 +58,7 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
       <div className="bg-hyper-panel border border-hyper-border rounded p-2">
         <div className="text-[10px] text-hyper-textSecondary mb-0.5">Avg PnL</div>
         <div className={`text-sm font-mono-numeric font-medium ${
-          summary.avgPnLPerPosition >= 0 ? 'text-hyper-positive' : 'text-hyper-negative'
+          summary.avgPnLPerPosition >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
         }`}>
           ${formatNumber(summary.avgPnLPerPosition)}
         </div>
@@ -94,7 +94,7 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
       
       <div className="bg-hyper-panel border border-hyper-border rounded p-2">
         <div className="text-[10px] text-hyper-textSecondary mb-0.5">Biggest Win</div>
-        <div className="text-sm font-mono-numeric font-medium text-hyper-positive">
+        <div className="text-sm font-mono-numeric font-medium text-hyper-accent">
           ${formatNumber(summary.biggestWin)}
         </div>
       </div>

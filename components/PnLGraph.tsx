@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { ClosedPosition } from '@/types';
 
 interface PnLGraphProps {
@@ -29,7 +29,7 @@ export default function PnLGraph({ positions }: PnLGraphProps) {
     setIsMounted(true);
   }, []);
 
-  // Calculate cumulative PnL over time
+  // Calculate cumulative PnL over time - single continuous line with color segments
   const data = useMemo(() => {
     if (positions.length === 0) return [];
 
@@ -42,16 +42,19 @@ export default function PnLGraph({ positions }: PnLGraphProps) {
 
     // Calculate cumulative PnL
     let cumulativePnL = 0;
-    const chartData: Array<{ date: string; pnl: number; cumulativePnL: number }> = [];
+    const chartData: Array<{ date: string; pnl: number; cumulativePnL: number; isPositive: boolean }> = [];
 
     for (const pos of sorted) {
       const closeDate = pos.closedAt ? new Date(pos.closedAt) : new Date(pos.openedAt);
+      const dateStr = closeDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
       cumulativePnL += pos.realizedPnL;
+      const isPositive = cumulativePnL >= 0;
       
       chartData.push({
-        date: closeDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        date: dateStr,
         pnl: pos.realizedPnL,
         cumulativePnL: cumulativePnL,
+        isPositive,
       });
     }
 
@@ -86,12 +89,12 @@ export default function PnLGraph({ positions }: PnLGraphProps) {
         <div className="bg-hyper-panel border border-hyper-border rounded p-2 text-[10px]">
           <div className="text-hyper-textSecondary mb-1">{data.date}</div>
           <div className="text-hyper-textPrimary">
-            PnL: <span className={`font-mono-numeric ${data.pnl >= 0 ? 'text-hyper-positive' : 'text-hyper-negative'}`}>
+            PnL: <span className={`font-mono-numeric ${data.pnl >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'}`}>
               ${formatNumber(data.pnl)}
             </span>
           </div>
           <div className="text-hyper-textPrimary mt-1">
-            Cumulative: <span className={`font-mono-numeric ${data.cumulativePnL >= 0 ? 'text-hyper-positive' : 'text-hyper-negative'}`}>
+            Cumulative: <span className={`font-mono-numeric ${data.cumulativePnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'}`}>
               ${formatNumber(data.cumulativePnL)}
             </span>
           </div>
@@ -119,8 +122,36 @@ export default function PnLGraph({ positions }: PnLGraphProps) {
             stroke="#9AA7B2"
             tick={{ fill: '#9AA7B2', fontSize: 10 }}
             tickFormatter={(value) => formatNumber(value)}
+            tick={(props) => {
+              const { x, y, payload } = props;
+              const isZero = payload.value === 0;
+              return (
+                <g transform={`translate(${x},${y})`}>
+                  <text
+                    x={0}
+                    y={0}
+                    dy={4}
+                    textAnchor="end"
+                    fill={isZero ? "#E6EDF6" : "#9AA7B2"}
+                    fontSize={isZero ? 11 : 10}
+                    fontWeight={isZero ? "bold" : "normal"}
+                  >
+                    {formatNumber(payload.value)}
+                  </text>
+                </g>
+              );
+            }}
           />
           <Tooltip content={<CustomTooltip />} />
+          {/* Prominent zero reference line */}
+          <ReferenceLine 
+            y={0} 
+            stroke="#9AA7B2" 
+            strokeWidth={2}
+            strokeDasharray="5 5"
+            label={{ value: "0", position: "right", fill: "#E6EDF6", fontSize: 11, fontWeight: 'bold' }}
+          />
+          {/* Single continuous line with accent color */}
           <Line 
             type="monotone" 
             dataKey="cumulativePnL" 
