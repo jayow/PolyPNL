@@ -29,32 +29,56 @@ export default function PnLGraph({ positions }: PnLGraphProps) {
     setIsMounted(true);
   }, []);
 
-  // Calculate cumulative PnL over time - single continuous line with color segments
+  // Calculate cumulative PnL over time - group by date and aggregate
   const data = useMemo(() => {
     if (positions.length === 0) return [];
 
-    // Sort positions by closedAt date
-    const sorted = [...positions].sort((a, b) => {
-      const dateA = a.closedAt ? new Date(a.closedAt).getTime() : new Date(a.openedAt).getTime();
-      const dateB = b.closedAt ? new Date(b.closedAt).getTime() : new Date(b.openedAt).getTime();
-      return dateA - dateB;
-    });
-
-    // Calculate cumulative PnL
-    let cumulativePnL = 0;
-    const chartData: Array<{ date: string; pnl: number; cumulativePnL: number; isPositive: boolean }> = [];
-
-    for (const pos of sorted) {
+    // Group positions by date (YYYY-MM-DD)
+    const positionsByDate = new Map<string, ClosedPosition[]>();
+    
+    for (const pos of positions) {
       const closeDate = pos.closedAt ? new Date(pos.closedAt) : new Date(pos.openedAt);
+      const dateKey = closeDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      
+      if (!positionsByDate.has(dateKey)) {
+        positionsByDate.set(dateKey, []);
+      }
+      positionsByDate.get(dateKey)!.push(pos);
+    }
+
+    // Sort dates chronologically
+    const sortedDates = Array.from(positionsByDate.keys()).sort();
+
+    // Calculate cumulative PnL and build chart data
+    let cumulativePnL = 0;
+    const chartData: Array<{ 
+      date: string; 
+      dateKey: string; // YYYY-MM-DD for grouping
+      pnl: number; 
+      cumulativePnL: number; 
+      isPositive: boolean;
+      positions: ClosedPosition[]; // All positions for this date
+    }> = [];
+
+    for (const dateKey of sortedDates) {
+      const dayPositions = positionsByDate.get(dateKey)!;
+      const totalPnL = dayPositions.reduce((sum, pos) => sum + pos.realizedPnL, 0);
+      
+      // Get first position's date for display
+      const firstPos = dayPositions[0];
+      const closeDate = firstPos.closedAt ? new Date(firstPos.closedAt) : new Date(firstPos.openedAt);
       const dateStr = closeDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      cumulativePnL += pos.realizedPnL;
+      
+      cumulativePnL += totalPnL;
       const isPositive = cumulativePnL >= 0;
       
       chartData.push({
         date: dateStr,
-        pnl: pos.realizedPnL,
+        dateKey,
+        pnl: totalPnL,
         cumulativePnL: cumulativePnL,
         isPositive,
+        positions: dayPositions,
       });
     }
 
@@ -85,19 +109,75 @@ export default function PnLGraph({ positions }: PnLGraphProps) {
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
+      const positions: ClosedPosition[] = data.positions || [];
+      
+      // Separate wins and losses
+      const wins = positions.filter(pos => pos.realizedPnL > 0);
+      const losses = positions.filter(pos => pos.realizedPnL < 0);
+      
+      // Sort: wins descending, losses ascending (biggest loss first)
+      wins.sort((a, b) => b.realizedPnL - a.realizedPnL);
+      losses.sort((a, b) => a.realizedPnL - b.realizedPnL);
+      
+      // Get top 5 wins and top 5 losses
+      const topWins = wins.slice(0, 5);
+      const topLosses = losses.slice(0, 5);
+      
       return (
-        <div className="bg-hyper-panel border border-hyper-border rounded p-2 text-[10px]">
-          <div className="text-hyper-textSecondary mb-1">{data.date}</div>
-          <div className="text-hyper-textPrimary">
+        <div className="bg-hyper-panel border border-hyper-border rounded p-2 text-[10px] max-w-[300px] max-h-[400px] overflow-y-auto">
+          <div className="text-hyper-textSecondary mb-2 font-medium">{data.date}</div>
+          
+          {/* Daily PnL */}
+          <div className="text-hyper-textPrimary mb-1">
             PnL: <span className={`font-mono-numeric ${data.pnl >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'}`}>
               ${formatNumber(data.pnl)}
             </span>
           </div>
-          <div className="text-hyper-textPrimary mt-1">
+          
+          {/* Cumulative PnL */}
+          <div className="text-hyper-textPrimary mb-3">
             Cumulative: <span className={`font-mono-numeric ${data.cumulativePnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'}`}>
               ${formatNumber(data.cumulativePnL)}
             </span>
           </div>
+          
+          {/* Top 5 Wins */}
+          {topWins.length > 0 && (
+            <div className="mb-2">
+              <div className="text-hyper-textSecondary mb-1 text-[9px] font-medium">Top Wins:</div>
+              <div className="space-y-0.5">
+                {topWins.map((pos, idx) => (
+                  <div key={idx} className="flex justify-between items-start gap-2">
+                    <div className="text-hyper-textPrimary truncate flex-1" title={pos.marketTitle || pos.eventTitle || 'Unknown'}>
+                      {pos.marketTitle || pos.eventTitle || 'Unknown'}
+                    </div>
+                    <div className="font-mono-numeric text-hyper-accent whitespace-nowrap">
+                      ${formatNumber(pos.realizedPnL)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Top 5 Losses */}
+          {topLosses.length > 0 && (
+            <div>
+              <div className="text-hyper-textSecondary mb-1 text-[9px] font-medium">Top Losses:</div>
+              <div className="space-y-0.5">
+                {topLosses.map((pos, idx) => (
+                  <div key={idx} className="flex justify-between items-start gap-2">
+                    <div className="text-hyper-textPrimary truncate flex-1" title={pos.marketTitle || pos.eventTitle || 'Unknown'}>
+                      {pos.marketTitle || pos.eventTitle || 'Unknown'}
+                    </div>
+                    <div className="font-mono-numeric text-hyper-negative whitespace-nowrap">
+                      ${formatNumber(pos.realizedPnL)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       );
     }
