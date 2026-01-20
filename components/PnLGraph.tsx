@@ -185,11 +185,12 @@ export default function PnLGraph({ positions }: PnLGraphProps) {
   };
 
   return (
-    <div className="bg-hyper-panel border border-hyper-border rounded p-3 h-64">
+    <div className="bg-hyper-panel border border-hyper-border rounded p-3 h-full flex flex-col">
       <div className="text-[10px] text-hyper-textSecondary mb-2 font-medium">
         Cumulative PnL Over Time
       </div>
-      <ResponsiveContainer width="100%" height="100%">
+      <div className="flex-1 min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1D2A3A" />
           <XAxis 
@@ -242,6 +243,7 @@ export default function PnLGraph({ positions }: PnLGraphProps) {
           />
         </LineChart>
       </ResponsiveContainer>
+      </div>
     </div>
   );
 }

@@ -205,41 +205,41 @@ export default function CalendarView({ positions }: CalendarViewProps) {
     const totalPnL = monthData?.pnl ?? 0;
 
     return (
-      <div className="mb-4">
+      <div className="h-full flex flex-col min-h-0">
         {/* Month Header */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between mb-1 flex-shrink-0">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => navigateMonth('prev')}
-              className="px-2 py-1 text-hyper-textSecondary hover:text-hyper-textPrimary hover:bg-hyper-panelHover rounded transition-colors"
+              className="px-1.5 py-0.5 text-hyper-textSecondary hover:text-hyper-textPrimary hover:bg-hyper-panelHover rounded transition-colors text-[10px]"
             >
               ←
             </button>
-            <h3 className="text-xs font-medium text-hyper-textPrimary">{monthDisplay}</h3>
+            <h3 className="text-[10px] font-medium text-hyper-textPrimary">{monthDisplay}</h3>
             <button
               onClick={() => navigateMonth('next')}
-              className="px-2 py-1 text-hyper-textSecondary hover:text-hyper-textPrimary hover:bg-hyper-panelHover rounded transition-colors"
+              className="px-1.5 py-0.5 text-hyper-textSecondary hover:text-hyper-textPrimary hover:bg-hyper-panelHover rounded transition-colors text-[10px]"
             >
               →
             </button>
           </div>
-          <div className="flex items-center gap-2">
-            <span className={`text-xs font-mono-numeric ${
+          <div className="flex items-center gap-1.5">
+            <span className={`text-[10px] font-mono-numeric ${
               totalPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(totalPnL)}
             </span>
-            <span className="text-[10px] text-hyper-textSecondary">
-              ({monthData?.positions.length ?? 0} {monthData?.positions.length === 1 ? 'position' : 'positions'})
+            <span className="text-[9px] text-hyper-textSecondary">
+              ({monthData?.positions.length ?? 0})
             </span>
           </div>
         </div>
 
         {/* Calendar Grid */}
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-0.5 flex-1 min-h-0 auto-rows-fr">
           {/* Day Headers */}
           {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
-            <div key={day} className="text-[10px] text-hyper-textSecondary text-center font-medium py-1">
+            <div key={day} className="text-[9px] text-hyper-textSecondary text-center font-medium flex items-center justify-center">
               {day}
             </div>
           ))}
@@ -281,16 +281,16 @@ export default function CalendarView({ positions }: CalendarViewProps) {
             return (
               <div
                 key={dayData.date}
-                className={`${bgColor} border border-hyper-border rounded p-1 min-h-[60px] flex flex-col justify-between relative group cursor-pointer`}
+                className={`${bgColor} border border-hyper-border rounded p-0.5 flex flex-col justify-between relative group cursor-pointer min-h-0`}
               >
-                <div className={`text-[10px] ${textColor} font-medium`}>
+                <div className={`text-[9px] ${textColor} font-medium leading-tight`}>
                   {dayData.day}
                 </div>
-                <div className={`text-[9px] ${pnlColor} font-mono-numeric`}>
+                <div className={`text-[8px] ${pnlColor} font-mono-numeric leading-tight truncate`}>
                   {hasData ? (
                     `$${formatNumber(dayData.pnl!)}`
                   ) : isCurrentMonth ? (
-                    <span className="text-hyper-muted text-[8px]">no trade</span>
+                    <span className="text-hyper-muted text-[7px]">no trade</span>
                   ) : null}
                 </div>
                 
@@ -542,8 +542,8 @@ export default function CalendarView({ positions }: CalendarViewProps) {
   }
 
   return (
-    <div className="bg-hyper-panel border border-hyper-border rounded p-3">
-      <div className="flex items-center justify-between mb-3">
+    <div className="bg-hyper-panel border border-hyper-border rounded p-3 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-3 flex-shrink-0">
         <div className="text-[10px] text-hyper-textSecondary font-medium">
           PnL Calendar
         </div>
@@ -571,7 +571,7 @@ export default function CalendarView({ positions }: CalendarViewProps) {
         </div>
       </div>
       
-      <div className="max-h-[calc(100vh-400px)] overflow-y-auto">
+      <div className={`flex-1 min-h-0 ${viewMode === 'month' ? 'overflow-y-auto' : 'overflow-y-auto pr-2'}`}>
         {viewMode === 'month' ? (
           renderMonthGrid(currentMonth.year, currentMonth.month)
         ) : (

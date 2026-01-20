@@ -22,7 +22,6 @@ export default function Home() {
   const [sortColumn, setSortColumn] = useState<keyof ClosedPosition | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedPosition, setSelectedPosition] = useState<ClosedPosition | null>(null);
-  const [viewMode, setViewMode] = useState<'chart' | 'calendar'>('chart');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -199,8 +198,6 @@ export default function Home() {
           setShowNumberColumns={setShowNumberColumns}
           onExport={exportToCSV}
           hasPositions={positions.length > 0}
-          viewMode={viewMode}
-          setViewMode={setViewMode}
         />
 
         {/* Loading State */}
@@ -253,14 +250,17 @@ export default function Home() {
                 {/* Summary Cards */}
                 {summary && <SummaryCards summary={summary} />}
 
-                {/* PnL Graph or Calendar View */}
+                {/* PnL Graph and Calendar View Side by Side */}
                 {positions.length > 0 && (
-                  <div className="mb-2">
-                    {viewMode === 'chart' ? (
+                  <div className="mb-2 grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {/* Left: Chart Panel */}
+                    <div className="h-[400px] md:h-[500px]">
                       <PnLGraph positions={filteredPositions} />
-                    ) : (
+                    </div>
+                    {/* Right: Calendar Panel */}
+                    <div className="h-[400px] md:h-[500px]">
                       <CalendarView positions={filteredPositions} />
-                    )}
+                    </div>
                   </div>
                 )}
 

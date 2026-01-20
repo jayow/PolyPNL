@@ -16,8 +16,6 @@ interface ToolbarProps {
   setShowNumberColumns: (show: boolean) => void;
   onExport: () => void;
   hasPositions: boolean;
-  viewMode: 'chart' | 'calendar';
-  setViewMode: (mode: 'chart' | 'calendar') => void;
 }
 
 export default function Toolbar({
@@ -34,8 +32,6 @@ export default function Toolbar({
   setShowNumberColumns,
   onExport,
   hasPositions,
-  viewMode,
-  setViewMode,
 }: ToolbarProps) {
   return (
     <div className="bg-hyper-panel border border-hyper-border rounded-md p-2 mb-2">
@@ -54,31 +50,6 @@ export default function Toolbar({
         
         {hasPositions && (
           <>
-            <div className="flex items-center gap-1 bg-hyper-bg border border-hyper-border rounded p-0.5">
-              <button
-                type="button"
-                onClick={() => setViewMode('chart')}
-                className={`px-2 py-1 rounded text-xs transition-colors ${
-                  viewMode === 'chart'
-                    ? 'bg-hyper-accent text-hyper-bg'
-                    : 'text-hyper-textSecondary hover:text-hyper-textPrimary'
-                }`}
-              >
-                Chart
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('calendar')}
-                className={`px-2 py-1 rounded text-xs transition-colors ${
-                  viewMode === 'calendar'
-                    ? 'bg-hyper-accent text-hyper-bg'
-                    : 'text-hyper-textSecondary hover:text-hyper-textPrimary'
-                }`}
-              >
-                Calendar
-              </button>
-            </div>
-            
             <input
               type="text"
               placeholder="Search..."
