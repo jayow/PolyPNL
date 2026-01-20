@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ClosedPosition, PositionSummary, ProxyWalletResponse } from '@/types';
 import Toolbar from '@/components/Toolbar';
 import SummaryCards from '@/components/SummaryCards';
+import YesNoAnalytics from '@/components/YesNoAnalytics';
 import Table from '@/components/Table';
 import DetailsPanel from '@/components/DetailsPanel';
 import PnLGraph from '@/components/PnLGraph';
@@ -249,8 +250,13 @@ export default function Home() {
             {/* Content Grid */}
             {positions.length > 0 && (
               <>
-                {/* Summary Cards */}
-                {summary && <SummaryCards summary={summary} />}
+                {/* Summary Cards with YES/NO Analytics */}
+                {summary && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-11 gap-2 mb-2">
+                    <SummaryCards summary={summary} />
+                    {positions.length > 0 && <YesNoAnalytics positions={filteredPositions} />}
+                  </div>
+                )}
 
                 {/* PnL Graph and Calendar View Side by Side */}
                 {positions.length > 0 && (

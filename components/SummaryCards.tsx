@@ -36,9 +36,14 @@ function formatDays(days: number): string {
   }
 }
 
+interface SummaryCardsContainerProps {
+  summary: PositionSummary;
+  children?: React.ReactNode;
+}
+
 export default function SummaryCards({ summary }: SummaryCardsProps) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-9 gap-2 mb-2">
+    <>
       <div className="bg-hyper-panel border border-hyper-border rounded p-2">
         <div className="text-[10px] text-hyper-textSecondary mb-0.5">Total PnL</div>
         <div className={`text-sm font-mono-numeric font-medium ${
@@ -113,6 +118,6 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
           ${formatNumber(summary.biggestLoss)}
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -17,6 +17,14 @@ interface TagStats {
   avgPnL: number;
   biggestWin: number;
   biggestLoss: number;
+  yesPnL: number;
+  yesWinRate: number;
+  yesAvgPnL: number;
+  yesCount: number;
+  noPnL: number;
+  noWinRate: number;
+  noAvgPnL: number;
+  noCount: number;
 }
 
 function formatNumber(num: number, decimals: number = 2): string {
@@ -102,6 +110,22 @@ export default function AdvancedAnalytics({ positions }: AdvancedAnalyticsProps)
       const biggestWin = data.wins.length > 0 ? Math.max(...data.wins) : 0;
       const biggestLoss = data.losses.length > 0 ? Math.min(...data.losses) : 0;
 
+      // YES positions stats
+      const yesPositions = data.positions.filter(pos => pos.side === 'Long YES');
+      const yesPnL = yesPositions.reduce((sum, pos) => sum + pos.realizedPnL, 0);
+      const yesWins = yesPositions.filter(pos => pos.realizedPnL > 0).length;
+      const yesWinRate = yesPositions.length > 0 ? (yesWins / yesPositions.length) * 100 : 0;
+      const yesAvgPnL = yesPositions.length > 0 ? yesPnL / yesPositions.length : 0;
+      const yesCount = yesPositions.length;
+
+      // NO positions stats
+      const noPositions = data.positions.filter(pos => pos.side === 'Long NO');
+      const noPnL = noPositions.reduce((sum, pos) => sum + pos.realizedPnL, 0);
+      const noWins = noPositions.filter(pos => pos.realizedPnL > 0).length;
+      const noWinRate = noPositions.length > 0 ? (noWins / noPositions.length) * 100 : 0;
+      const noAvgPnL = noPositions.length > 0 ? noPnL / noPositions.length : 0;
+      const noCount = noPositions.length;
+
       return {
         tag,
         totalPnL: data.totalPnL,
@@ -112,6 +136,14 @@ export default function AdvancedAnalytics({ positions }: AdvancedAnalyticsProps)
         avgPnL,
         biggestWin,
         biggestLoss,
+        yesPnL,
+        yesWinRate,
+        yesAvgPnL,
+        yesCount,
+        noPnL,
+        noWinRate,
+        noAvgPnL,
+        noCount,
       };
     });
 
@@ -256,6 +288,42 @@ export default function AdvancedAnalytics({ positions }: AdvancedAnalyticsProps)
                 >
                   Biggest Loss <SortIndicator column="biggestLoss" />
                 </th>
+                <th 
+                  className="px-3 py-2 text-right text-xs font-medium text-hyper-textSecondary uppercase cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                  onClick={() => handleSort('yesPnL')}
+                >
+                  YES PnL <SortIndicator column="yesPnL" />
+                </th>
+                <th 
+                  className="px-3 py-2 text-right text-xs font-medium text-hyper-textSecondary uppercase cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                  onClick={() => handleSort('yesWinRate')}
+                >
+                  YES WR <SortIndicator column="yesWinRate" />
+                </th>
+                <th 
+                  className="px-3 py-2 text-right text-xs font-medium text-hyper-textSecondary uppercase cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                  onClick={() => handleSort('yesCount')}
+                >
+                  YES Cnt <SortIndicator column="yesCount" />
+                </th>
+                <th 
+                  className="px-3 py-2 text-right text-xs font-medium text-hyper-textSecondary uppercase cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                  onClick={() => handleSort('noPnL')}
+                >
+                  NO PnL <SortIndicator column="noPnL" />
+                </th>
+                <th 
+                  className="px-3 py-2 text-right text-xs font-medium text-hyper-textSecondary uppercase cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                  onClick={() => handleSort('noWinRate')}
+                >
+                  NO WR <SortIndicator column="noWinRate" />
+                </th>
+                <th 
+                  className="px-3 py-2 text-right text-xs font-medium text-hyper-textSecondary uppercase cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                  onClick={() => handleSort('noCount')}
+                >
+                  NO Cnt <SortIndicator column="noCount" />
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-hyper-border">
@@ -287,6 +355,28 @@ export default function AdvancedAnalytics({ positions }: AdvancedAnalyticsProps)
                     stat.biggestLoss < 0 ? 'text-hyper-negative' : 'text-hyper-textSecondary'
                   }`}>
                     {stat.biggestLoss < 0 ? `$${formatNumber(stat.biggestLoss)}` : '-'}
+                  </td>
+                  <td className={`px-3 py-2 text-right font-mono-numeric ${
+                    stat.yesPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
+                  }`}>
+                    ${formatNumber(stat.yesPnL)}
+                  </td>
+                  <td className="px-3 py-2 text-right text-hyper-textSecondary">
+                    {stat.yesWinRate.toFixed(1)}%
+                  </td>
+                  <td className="px-3 py-2 text-right text-hyper-textSecondary">
+                    {stat.yesCount}
+                  </td>
+                  <td className={`px-3 py-2 text-right font-mono-numeric ${
+                    stat.noPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
+                  }`}>
+                    ${formatNumber(stat.noPnL)}
+                  </td>
+                  <td className="px-3 py-2 text-right text-hyper-textSecondary">
+                    {stat.noWinRate.toFixed(1)}%
+                  </td>
+                  <td className="px-3 py-2 text-right text-hyper-textSecondary">
+                    {stat.noCount}
                   </td>
                 </tr>
               ))}
