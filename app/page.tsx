@@ -8,6 +8,7 @@ import Table from '@/components/Table';
 import DetailsPanel from '@/components/DetailsPanel';
 import PnLGraph from '@/components/PnLGraph';
 import CalendarView from '@/components/CalendarView';
+import AdvancedAnalytics from '@/components/AdvancedAnalytics';
 
 export default function Home() {
   const [wallet, setWallet] = useState('');
@@ -22,6 +23,7 @@ export default function Home() {
   const [sortColumn, setSortColumn] = useState<keyof ClosedPosition | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedPosition, setSelectedPosition] = useState<ClosedPosition | null>(null);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -264,34 +266,64 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Results Count */}
-                <div className="text-[10px] text-hyper-textSecondary mb-1 px-1">
-                  Showing {filteredPositions.length.toLocaleString('en-US')} of {positions.length.toLocaleString('en-US')} positions
+                {/* Results Count and View Toggle */}
+                <div className="flex items-center justify-between mb-2 px-1">
+                  <div className="text-[10px] text-hyper-textSecondary">
+                    Showing {filteredPositions.length.toLocaleString('en-US')} of {positions.length.toLocaleString('en-US')} positions
+                  </div>
+                  <div className="flex items-center gap-1 bg-hyper-bg border border-hyper-border rounded p-0.5">
+                    <button
+                      onClick={() => setShowAnalytics(false)}
+                      className={`px-3 py-1.5 rounded text-xs transition-colors ${
+                        !showAnalytics
+                          ? 'bg-hyper-accent text-hyper-bg'
+                          : 'text-hyper-textSecondary hover:text-hyper-textPrimary'
+                      }`}
+                    >
+                      Positions
+                    </button>
+                    <button
+                      onClick={() => setShowAnalytics(true)}
+                      className={`px-3 py-1.5 rounded text-xs transition-colors ${
+                        showAnalytics
+                          ? 'bg-hyper-accent text-hyper-bg'
+                          : 'text-hyper-textSecondary hover:text-hyper-textPrimary'
+                      }`}
+                    >
+                      Analytics
+                    </button>
+                  </div>
                 </div>
 
-                {/* Main Content: Table + Details Panel */}
-                <div className="grid grid-cols-[70%_30%] gap-2">
-                  {/* Table */}
+                {/* Main Content: Table/Analytics + Details Panel */}
+                {showAnalytics ? (
                   <div>
-                    <Table
-                      positions={filteredPositions}
-                      showNumberColumns={showNumberColumns}
-                      sortColumn={sortColumn}
-                      sortDirection={sortDirection}
-                      onSort={handleSort}
-                      selectedPosition={selectedPosition}
-                      onSelectPosition={setSelectedPosition}
-                    />
+                    <AdvancedAnalytics positions={filteredPositions} />
                   </div>
+                ) : (
+                  <div className="grid grid-cols-[70%_30%] gap-2">
+                    {/* Table */}
+                    <div>
+                      <Table
+                        positions={filteredPositions}
+                        showNumberColumns={showNumberColumns}
+                        sortColumn={sortColumn}
+                        sortDirection={sortDirection}
+                        onSort={handleSort}
+                        selectedPosition={selectedPosition}
+                        onSelectPosition={setSelectedPosition}
+                      />
+                    </div>
 
-                  {/* Details Panel */}
-                  <div>
-                    <DetailsPanel
-                      selectedPosition={selectedPosition}
-                      resolveResult={resolveResult}
-                    />
+                    {/* Details Panel */}
+                    <div>
+                      <DetailsPanel
+                        selectedPosition={selectedPosition}
+                        resolveResult={resolveResult}
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
               </>
             )}
           </div>
