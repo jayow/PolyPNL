@@ -47,6 +47,8 @@ export interface NormalizedTrade {
   eventSlug?: string;
   slug?: string;
   icon?: string;
+  category?: string; // Market category/tag
+  tags?: string[]; // Array of tags/categories
 }
 
 export interface TradeLot {
@@ -75,6 +77,8 @@ export interface ClosedPosition {
   eventSlug?: string;
   slug?: string;
   icon?: string;
+  category?: string; // Market category/tag
+  tags?: string[]; // Array of tags/categories
 }
 
 export interface PositionSummary {
@@ -87,12 +91,16 @@ export interface PositionSummary {
   avgPosSize: number;
   avgHoldingTime: number; // in days
   mostUsedCategory: string;
+  mostUsedTag: string;
+  topTags: string[]; // Top 3 most used tags
 }
 
 export interface MarketMetadata {
   eventTitle?: string;
   marketTitle?: string;
   outcomeName?: string;
+  category?: string; // Market category/tag (e.g., "pre-market", "swing", etc.)
+  tags?: string[]; // Array of tags/categories
 }
 
 // Polymarket API Response for closed positions
@@ -114,4 +122,7 @@ export interface PolymarketClosedPosition {
   oppositeOutcome?: string;
   oppositeAsset?: string;
   endDate?: string;
+  category?: string; // Category from API
+  tags?: string[]; // Tags from API
+  [key: string]: any; // Allow additional fields from API
 }

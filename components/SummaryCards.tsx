@@ -90,6 +90,14 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
         <div className="text-sm font-medium text-hyper-textPrimary truncate" title={summary.mostUsedCategory}>
           {summary.mostUsedCategory}
         </div>
+        <div className="text-[10px] text-hyper-textSecondary mb-0.5 mt-1">Top Tags</div>
+        <div className="text-xs font-medium text-hyper-textPrimary truncate" title={summary.topTags && summary.topTags.length > 0 ? summary.topTags.join(', ') : summary.mostUsedTag || '-'}>
+          {summary.topTags && summary.topTags.length > 0 ? (
+            summary.topTags.join(', ')
+          ) : (
+            summary.mostUsedTag || '-'
+          )}
+        </div>
       </div>
       
       <div className="bg-hyper-panel border border-hyper-border rounded p-2">

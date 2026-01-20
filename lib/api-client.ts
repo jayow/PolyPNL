@@ -663,7 +663,8 @@ export function normalizeTrade(trade: PolymarketTrade, userAddress: string): Nor
  */
 export async function fetchMarketMetadata(
   conditionId: string,
-  outcome?: string
+  outcome?: string,
+  slug?: string
 ): Promise<MarketMetadata> {
   const cacheKey = `${conditionId}:${outcome || ''}`;
 
@@ -673,16 +674,34 @@ export async function fetchMarketMetadata(
 
   try {
     // Try to fetch market info from Gamma API
-    // Note: The exact endpoint may vary, this is a placeholder structure
-    const response = await fetchWithTimeout(
-      `${GAMMA_API_BASE}/markets?conditionId=${encodeURIComponent(conditionId)}`,
-      {
+    // Prefer slug-based lookup if available, as it might be more reliable
+    let response: Response | null = null;
+    let url = '';
+    
+    if (slug) {
+      // Try slug-based endpoint first
+      url = `${GAMMA_API_BASE}/markets?slug=${encodeURIComponent(slug)}`;
+      try {
+        response = await fetchWithTimeout(url, {
+          headers: {
+            'Accept': 'application/json',
+          },
+        }, 10000);
+      } catch (e) {
+        console.log(`[fetchMarketMetadata] Slug endpoint failed for ${slug}, trying conditionId...`);
+        response = null;
+      }
+    }
+    
+    // Fallback to conditionId endpoint
+    if (!response || !response.ok) {
+      url = `${GAMMA_API_BASE}/markets?conditionId=${encodeURIComponent(conditionId)}`;
+      response = await fetchWithTimeout(url, {
         headers: {
           'Accept': 'application/json',
         },
-      },
-      10000 // 10 second timeout for metadata
-    );
+      }, 10000);
+    }
 
     if (response.ok) {
       const data = await response.json();
@@ -695,18 +714,290 @@ export async function fetchMarketMetadata(
         market = data.market;
       } else if (data.data) {
         market = data.data;
+      } else if (data) {
+        // Sometimes the response is the market object directly
+        market = data;
+      }
+      
+      // The API returns markets with events array, not a single event object
+      // Normalize to have event as the first event in the events array
+      if (market && market.events && Array.isArray(market.events) && market.events.length > 0 && !market.event) {
+        market.event = market.events[0];
       }
 
       if (market) {
+        // Debug: Log all available fields to understand the structure (only for first few)
+        const isFirstFew = !marketMetadataCache.has('_logged');
+        if (isFirstFew) {
+          marketMetadataCache.set('_logged', true);
+          console.log(`[fetchMarketMetadata] Market fields for ${conditionId}:`, Object.keys(market));
+          if (market.event) {
+            console.log(`[fetchMarketMetadata] Event fields:`, Object.keys(market.event));
+            console.log(`[fetchMarketMetadata] Event sample:`, JSON.stringify(market.event).substring(0, 500));
+          }
+          // Check for tag-related fields
+          const allKeys = Object.keys(market);
+          const tagRelatedKeys = allKeys.filter(k => k.toLowerCase().includes('tag') || k.toLowerCase().includes('categor'));
+          console.log(`[fetchMarketMetadata] Tag/category related keys:`, tagRelatedKeys);
+          
+          // Also check event keys for tags
+          if (market.event || (market.events && market.events.length > 0)) {
+            const event = market.event || market.events[0];
+            const eventKeys = Object.keys(event);
+            const eventTagKeys = eventKeys.filter(k => k.toLowerCase().includes('tag') || k.toLowerCase().includes('categor'));
+            console.log(`[fetchMarketMetadata] Event tag/category related keys:`, eventTagKeys);
+            console.log(`[fetchMarketMetadata] Event object (first 1500 chars):`, JSON.stringify(event).substring(0, 1500));
+          }
+          
+          console.log(`[fetchMarketMetadata] Full market sample (first 2000 chars):`, JSON.stringify(market).substring(0, 2000));
+        }
+        
+        // Extract category/tag information from various possible fields
+        // Based on Polymarket API docs: https://docs.polymarket.com/api-reference/tags
+        // Markets may have tagIds, or we may need to query tags separately
+        let category: string | undefined;
+        let tags: string[] | undefined;
+        
+        // First, check if market has tagIds directly
+        const tagIds = market.tagIds || market.tag_ids || market.event?.tagIds || market.event?.tag_ids;
+        if (tagIds && Array.isArray(tagIds) && tagIds.length > 0) {
+          // Fetch tag details for each tagId
+          try {
+            const tagPromises = tagIds.map((tagId: string | number) => 
+              fetchWithTimeout(`${GAMMA_API_BASE}/tags/${tagId}`, {
+                headers: { 'Accept': 'application/json' },
+              }, 5000)
+                .then(res => res.ok ? res.json() : null)
+                .catch(() => null)
+            );
+            const tagResults = await Promise.all(tagPromises);
+            const validTags = tagResults.filter(Boolean);
+            
+            if (validTags.length > 0) {
+              // Use tag labels as tags array
+              tags = validTags.map((tag: any) => tag.label || tag.slug).filter(Boolean);
+              // Use first tag's label as category
+              category = validTags[0]?.label || validTags[0]?.slug;
+            }
+          } catch (tagError) {
+            console.log(`[fetchMarketMetadata] Failed to fetch tags for ${conditionId}:`, tagError);
+          }
+        }
+        
+        // If no tags from market tagIds, try to fetch via event slug
+        if (!tags || tags.length === 0) {
+          const events = market.events || (market.event ? [market.event] : []);
+          console.log(`[fetchMarketMetadata] Checking events for tags. Events array length: ${events.length}`);
+          if (events.length > 0) {
+            const event = events[0];
+            const eventSlug = event.slug || event.ticker || market.eventSlug;
+            console.log(`[fetchMarketMetadata] Extracted event slug: ${eventSlug} (from event.slug=${event.slug}, event.ticker=${event.ticker}, market.eventSlug=${market.eventSlug})`);
+            
+            // First, check if the event object already has tags (from market response)
+            // This is the key insight from polymarket-dashboard: events have tags array!
+            if (event.tags && Array.isArray(event.tags) && event.tags.length > 0) {
+              console.log(`[fetchMarketMetadata] Found tags in event object from market response`);
+              const eventTags: string[] = [];
+              
+              // Extract tag labels (same logic as polymarket-dashboard)
+              for (const tag of event.tags) {
+                if (typeof tag === 'object' && tag.label) {
+                  const label = tag.label.trim();
+                  if (label && label.length > 0 && label !== 'NONE' && label.toLowerCase() !== 'none') {
+                    eventTags.push(label);
+                  }
+                } else if (typeof tag === 'string' && tag.trim()) {
+                  const label = tag.trim();
+                  if (label && label !== 'NONE' && label.toLowerCase() !== 'none') {
+                    eventTags.push(label);
+                  }
+                }
+              }
+              
+              if (eventTags.length > 0) {
+                tags = eventTags;
+                category = eventTags[0]; // First tag is the category
+                console.log(`[fetchMarketMetadata] Extracted tags from event object:`, tags);
+              }
+            }
+            
+            // If no tags in event object, try fetching from events API endpoint
+            if ((!tags || tags.length === 0) && eventSlug) {
+              try {
+                console.log(`[fetchMarketMetadata] Attempting to fetch event tags via event slug: ${eventSlug}`);
+                // Try multiple event API endpoint formats
+                let eventResponse: Response | null = null;
+                const eventEndpoints = [
+                  `${GAMMA_API_BASE}/events?slug=${encodeURIComponent(eventSlug)}`,
+                  `${GAMMA_API_BASE}/events/${encodeURIComponent(eventSlug)}`,
+                ];
+                
+                for (const endpoint of eventEndpoints) {
+                  try {
+                    console.log(`[fetchMarketMetadata] Trying event endpoint: ${endpoint}`);
+                    eventResponse = await fetchWithTimeout(endpoint, {
+                      headers: { 'Accept': 'application/json' },
+                    }, 5000);
+                    if (eventResponse.ok) {
+                      console.log(`[fetchMarketMetadata] Event API success with endpoint: ${endpoint}`);
+                      break;
+                    } else {
+                      console.log(`[fetchMarketMetadata] Event API returned ${eventResponse.status} for ${endpoint}`);
+                    }
+                  } catch (e: any) {
+                    console.log(`[fetchMarketMetadata] Event API endpoint failed: ${endpoint}`, e?.message || e);
+                    eventResponse = null;
+                  }
+                }
+                
+                if (!eventResponse || !eventResponse.ok) {
+                  console.log(`[fetchMarketMetadata] All event API endpoints failed for slug: ${eventSlug}`);
+                }
+                
+                if (eventResponse.ok) {
+                  const eventData = await eventResponse.json();
+                  const eventObj = Array.isArray(eventData) ? (eventData.length > 0 ? eventData[0] : null) : eventData;
+                  
+                  if (eventObj) {
+                    // Check if event has tagIds
+                    const eventTagIds = eventObj.tagIds || eventObj.tag_ids || eventObj.tags;
+                    
+                    if (eventTagIds && Array.isArray(eventTagIds) && eventTagIds.length > 0) {
+                      console.log(`[fetchMarketMetadata] Found ${eventTagIds.length} tagIds in event:`, eventTagIds);
+                      // Fetch tag details
+                      const tagPromises = eventTagIds.map((tagId: string | number) => 
+                        fetchWithTimeout(`${GAMMA_API_BASE}/tags/${tagId}`, {
+                          headers: { 'Accept': 'application/json' },
+                        }, 5000)
+                          .then(res => res.ok ? res.json() : null)
+                          .catch(() => null)
+                      );
+                      const tagResults = await Promise.all(tagPromises);
+                      const validTags = tagResults.filter(Boolean);
+                      
+                      if (validTags.length > 0) {
+                        tags = validTags.map((tag: any) => tag.label || tag.slug).filter(Boolean);
+                        category = validTags[0]?.label || validTags[0]?.slug;
+                        console.log(`[fetchMarketMetadata] Fetched tags from event:`, tags);
+                      }
+                    }
+                    
+                    // Check if event has tags directly (not tagIds) - this is the key!
+                    // Based on polymarket-dashboard: events have tags array with { id, label, slug } objects
+                    if (eventObj && eventObj.tags && Array.isArray(eventObj.tags) && eventObj.tags.length > 0) {
+                      console.log(`[fetchMarketMetadata] Found tags array in event API response:`, eventObj.tags);
+                      const eventTags: string[] = [];
+                      
+                      // Extract tag labels (same logic as polymarket-dashboard)
+                      for (const tag of eventObj.tags) {
+                        if (typeof tag === 'object' && tag.label) {
+                          const label = tag.label.trim();
+                          if (label && label.length > 0 && label !== 'NONE' && label.toLowerCase() !== 'none') {
+                            eventTags.push(label);
+                          }
+                        } else if (typeof tag === 'string' && tag.trim()) {
+                          const label = tag.trim();
+                          if (label && label !== 'NONE' && label.toLowerCase() !== 'none') {
+                            eventTags.push(label);
+                          }
+                        }
+                      }
+                      
+                      if (eventTags.length > 0) {
+                        tags = eventTags;
+                        category = eventTags[0]; // First tag is the category
+                        console.log(`[fetchMarketMetadata] Extracted tags from event API:`, tags);
+                      }
+                    }
+                  }
+                } else {
+                  console.log(`[fetchMarketMetadata] Event API returned ${eventResponse.status} for slug: ${eventSlug}`);
+                }
+              } catch (eventError) {
+                console.log(`[fetchMarketMetadata] Failed to fetch event tags for ${eventSlug}:`, eventError);
+              }
+            }
+            
+            // If still no tags, try to extract from series
+            if (!tags || tags.length === 0) {
+              const series = event.series || [];
+              
+              // Use series title as category if available
+              if (series.length > 0) {
+                const seriesTitle = series[0].title || series[0].slug;
+                if (seriesTitle) {
+                  category = seriesTitle;
+                  tags = series.map((s: any) => s.title || s.slug).filter(Boolean);
+                }
+              }
+            }
+          }
+        }
+        
+        // Debug: Log what we found
+        if (isFirstFew) {
+          const events = market.events || (market.event ? [market.event] : []);
+          if (events.length > 0) {
+            const event = events[0];
+            const series = event.series || [];
+            console.log(`[fetchMarketMetadata] Market has tagIds:`, tagIds);
+            console.log(`[fetchMarketMetadata] Event has ${series.length} series:`, series.map((s: any) => s.title || s.slug));
+          }
+        }
+        
+        // Fallback: Try different possible field names for category
+        if (!category) {
+          category = market.category || 
+                     market.group || 
+                     market.marketType || 
+                     market.type ||
+                     market.event?.category ||
+                     market.event?.group ||
+                     market.event?.type ||
+                     market.event?.marketType ||
+                     undefined;
+        }
+        
+        // Fallback: Try different possible field names for tags
+        if (!tags || tags.length === 0) {
+          if (market.tags && Array.isArray(market.tags) && market.tags.length > 0) {
+            tags = market.tags;
+          } else if (market.groups && Array.isArray(market.groups) && market.groups.length > 0) {
+            tags = market.groups;
+          } else if (market.categories && Array.isArray(market.categories) && market.categories.length > 0) {
+            tags = market.categories;
+          } else if (market.event?.tags && Array.isArray(market.event.tags) && market.event.tags.length > 0) {
+            tags = market.event.tags;
+          } else if (market.event?.groups && Array.isArray(market.event.groups) && market.event.groups.length > 0) {
+            tags = market.event.groups;
+          } else if (market.event?.categories && Array.isArray(market.event.categories) && market.event.categories.length > 0) {
+            tags = market.event.categories;
+          } else if (category) {
+            // If we have a category but no tags array, use category as single tag
+            tags = [category];
+          }
+        }
+        
+        // Debug: Log what we extracted (only for first few)
+        if (isFirstFew) {
+          console.log(`[fetchMarketMetadata] Extracted for ${conditionId}: category=${category}, tags=${JSON.stringify(tags)}`);
+        }
+        
         const metadata: MarketMetadata = {
           eventTitle: market.event?.title || market.eventTitle,
           marketTitle: market.question || market.title || market.marketTitle,
           outcomeName: outcome ? market.outcomes?.[parseInt(outcome)]?.name : undefined,
+          category,
+          tags,
         };
 
         marketMetadataCache.set(cacheKey, metadata);
         return metadata;
+      } else {
+        console.log(`[fetchMarketMetadata] No market found in response for ${conditionId}`);
       }
+    } else {
+      console.log(`[fetchMarketMetadata] API response not OK for ${conditionId}: ${response.status}`);
     }
   } catch (error) {
     console.error(`Error fetching market metadata for ${conditionId}:`, error);
@@ -748,6 +1039,8 @@ export async function enrichTradesWithMetadata(trades: NormalizedTrade[]): Promi
         eventTitle: trade.eventTitle || metadata.eventTitle,
         marketTitle: trade.marketTitle || metadata.marketTitle,
         outcomeName: trade.outcomeName || metadata.outcomeName,
+        category: trade.category || metadata.category,
+        tags: trade.tags || metadata.tags,
       };
     }
     return trade;
@@ -810,6 +1103,17 @@ export async function fetchClosedPositions(
 
       const data: PolymarketClosedPosition[] = await response.json();
       console.log(`[API] Found ${data.length} closed positions at offset ${offset}`);
+      
+      // Debug: Log sample position to see what fields are available
+      if (offset === 0 && data.length > 0) {
+        console.log(`[API] Sample position fields:`, Object.keys(data[0]));
+        console.log(`[API] Sample position category/tags:`, {
+          category: data[0].category,
+          tags: data[0].tags,
+          hasCategory: !!data[0].category,
+          hasTags: !!data[0].tags,
+        });
+      }
 
       if (data.length === 0) {
         console.log(`[API] No more closed positions found, stopping pagination`);
@@ -861,6 +1165,9 @@ export async function fetchClosedPositions(
           eventSlug: pos.eventSlug,
           slug: pos.slug,
           icon: pos.icon,
+          // Don't use category/tags from closed-positions API - will be fetched from markets API
+          category: undefined,
+          tags: undefined,
         };
 
         // Filter by date range if provided (client-side filtering)

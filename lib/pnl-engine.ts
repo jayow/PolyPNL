@@ -154,6 +154,8 @@ export class FIFOPnLEngine {
         eventSlug: trade.eventSlug || firstTrade?.eventSlug,
         slug: trade.slug || firstTrade?.slug,
         icon: trade.icon || firstTrade?.icon,
+        category: trade.category || firstTrade?.category,
+        tags: trade.tags || firstTrade?.tags,
       };
 
       this.closedPositions.get(key)!.push(closedPosition);

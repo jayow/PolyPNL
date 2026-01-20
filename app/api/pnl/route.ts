@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActivity, normalizeTrade, enrichTradesWithMetadata } from '@/lib/api-client';
+import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActivity, normalizeTrade, enrichTradesWithMetadata, fetchMarketMetadata } from '@/lib/api-client';
 import { FIFOPnLEngine } from '@/lib/pnl-engine';
 import { ClosedPosition, PositionSummary } from '@/types';
 
@@ -113,6 +113,52 @@ export async function GET(request: NextRequest) {
           });
           
           console.log(`[API /pnl] Enhanced ${enhancedTimeCount} positions with open times, ${enhancedTradeCount} with trade counts from activity API`);
+        }
+        
+        // Enhance positions with category metadata
+        console.log(`[API /pnl] Fetching category metadata for positions...`);
+        try {
+          // Create a map of conditionId -> position to get slugs
+          const positionMap = new Map(closedPositions.map(pos => [pos.conditionId, pos]));
+          const uniqueConditionIds = Array.from(positionMap.keys());
+          
+          const categoryPromises = uniqueConditionIds.map(conditionId => {
+            const pos = positionMap.get(conditionId)!;
+            // Pass slug if available for better API lookup
+            return fetchMarketMetadata(conditionId, pos.outcome, pos.slug).then(metadata => ({ conditionId, metadata }));
+          });
+          const categoryResults = await Promise.all(categoryPromises);
+          const categoryMap = new Map(categoryResults.map(r => [r.conditionId, r.metadata]));
+          
+          closedPositions = closedPositions.map(pos => {
+            const metadata = categoryMap.get(pos.conditionId);
+            // Always use markets API metadata, ignore closed-positions API category/tags
+            if (metadata && (metadata.category || metadata.tags)) {
+              return {
+                ...pos,
+                category: metadata.category,
+                tags: metadata.tags && metadata.tags.length > 0 ? metadata.tags : (metadata.category ? [metadata.category] : undefined),
+              };
+            }
+            // If no metadata found, remove category/tags from closed-positions API
+            return {
+              ...pos,
+              category: undefined,
+              tags: undefined,
+            };
+          });
+          
+          // Debug: Log category/tag distribution
+          const categoryDist = new Map<string, number>();
+          const tagDist = new Map<string, number>();
+          closedPositions.forEach(pos => {
+            if (pos.category) categoryDist.set(pos.category, (categoryDist.get(pos.category) || 0) + 1);
+            if (pos.tags) pos.tags.forEach(tag => tagDist.set(tag, (tagDist.get(tag) || 0) + 1));
+          });
+          console.log(`[API /pnl] Category distribution (from markets API):`, Object.fromEntries(categoryDist));
+          console.log(`[API /pnl] Tag distribution (from markets API):`, Object.fromEntries(tagDist));
+        } catch (categoryError) {
+          console.warn(`[API /pnl] Failed to fetch category metadata:`, categoryError);
         }
       } catch (activityError) {
         console.warn(`[API /pnl] Failed to fetch activity for open time enhancement:`, activityError);
@@ -240,10 +286,12 @@ function calculateSummary(positions: ClosedPosition[]): PositionSummary {
       totalPositionsClosed: 0,
       biggestWin: 0,
       biggestLoss: 0,
-      avgPosSize: 0,
-      avgHoldingTime: 0,
-      mostUsedCategory: '-',
-    };
+    avgPosSize: 0,
+    avgHoldingTime: 0,
+    mostUsedCategory: '-',
+    mostUsedTag: '-',
+    topTags: [],
+  };
   }
 
   const totalRealizedPnL = positions.reduce((sum, pos) => sum + pos.realizedPnL, 0);
@@ -282,33 +330,64 @@ function calculateSummary(positions: ClosedPosition[]): PositionSummary {
     avgHoldingTime = totalHoldingTime / positionsWithValidHoldingTime.length;
   }
 
-  // Find most used category (extract from eventTitle)
+  // Find most used category - count only actual category field
   const categoryCounts = new Map<string, number>();
+  const tagCounts = new Map<string, number>();
+
   positions.forEach(pos => {
-    const eventTitle = pos.eventTitle || '';
-    // Extract category - use the first part before a dash or colon, or use first word
-    let category = eventTitle.split(' - ')[0].split(':')[0].trim();
-    if (!category) {
-      category = pos.marketTitle?.split(' - ')[0]?.split(':')[0]?.trim() || 'Unknown';
+    // Count categories (only from pos.category field, not tags)
+    // Don't use fallback - only count actual categories from API
+    if (pos.category) {
+      categoryCounts.set(pos.category, (categoryCounts.get(pos.category) || 0) + 1);
     }
-    if (category) {
-      categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+    
+    // Count tags separately (only from pos.tags array)
+    if (pos.tags && pos.tags.length > 0) {
+      pos.tags.forEach(tag => {
+        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+      });
     }
   });
-  
+
+  // Find most used category
   let mostUsedCategory = '-';
-  let maxCount = 0;
+  let maxCategoryCount = 0;
   categoryCounts.forEach((count, category) => {
-    if (count > maxCount) {
-      maxCount = count;
+    if (count > maxCategoryCount) {
+      maxCategoryCount = count;
       mostUsedCategory = category;
     }
   });
 
-  // Truncate category if too long
+  // Find most used tag
+  let mostUsedTag = '-';
+  let maxTagCount = 0;
+  tagCounts.forEach((count, tag) => {
+    if (count > maxTagCount) {
+      maxTagCount = count;
+      mostUsedTag = tag;
+    }
+  });
+
+  // Find top 3 tags
+  const topTagsArray = Array.from(tagCounts.entries())
+    .sort((a, b) => b[1] - a[1]) // Sort by count descending
+    .slice(0, 3) // Take top 3
+    .map(([tag]) => tag); // Extract just the tag name
+
+  // Truncate if too long
   if (mostUsedCategory.length > 20) {
     mostUsedCategory = mostUsedCategory.substring(0, 17) + '...';
   }
+  if (mostUsedTag.length > 20) {
+    mostUsedTag = mostUsedTag.substring(0, 17) + '...';
+  }
+  const topTags = topTagsArray.map(tag => {
+    if (tag.length > 20) {
+      return tag.substring(0, 17) + '...';
+    }
+    return tag;
+  });
 
   return {
     totalRealizedPnL,
@@ -320,5 +399,7 @@ function calculateSummary(positions: ClosedPosition[]): PositionSummary {
     avgPosSize,
     avgHoldingTime,
     mostUsedCategory,
+    mostUsedTag,
+    topTags,
   };
 }
