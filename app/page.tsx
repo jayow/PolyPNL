@@ -176,7 +176,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-hyper-bg text-hyper-textPrimary p-2" style={{ backgroundColor: '#0B0F14', color: '#E6EDF6' }}>
-      <div className="max-w-full h-[calc(100vh-16px)] flex flex-col">
+      <div className="max-w-full flex flex-col">
         {/* Header */}
         <div className="mb-2">
           <h1 className="text-sm font-medium text-hyper-textPrimary mb-0.5">Poly PNL</h1>
@@ -217,7 +217,7 @@ export default function Home() {
 
         {/* Results Section */}
         {!loading && (positions.length > 0 || (resolveResult && positions.length === 0)) && (
-          <div className="flex-1 flex flex-col min-h-0">
+          <div className="flex flex-col">
             {/* Empty State */}
             {positions.length === 0 && (
               <div className="flex-1 flex items-center justify-center">
@@ -270,9 +270,9 @@ export default function Home() {
                 </div>
 
                 {/* Main Content: Table + Details Panel */}
-                <div className="flex-1 grid grid-cols-[70%_30%] gap-2 min-h-0">
+                <div className="grid grid-cols-[70%_30%] gap-2">
                   {/* Table */}
-                  <div className="min-h-0">
+                  <div>
                     <Table
                       positions={filteredPositions}
                       showNumberColumns={showNumberColumns}
@@ -285,7 +285,7 @@ export default function Home() {
                   </div>
 
                   {/* Details Panel */}
-                  <div className="min-h-0">
+                  <div>
                     <DetailsPanel
                       selectedPosition={selectedPosition}
                       resolveResult={resolveResult}

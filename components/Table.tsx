@@ -59,43 +59,37 @@ export default function Table({
   };
 
   return (
-    <div className="bg-hyper-panel border border-hyper-border rounded overflow-hidden flex flex-col h-full">
-      <div className="overflow-auto flex-1">
-        <table className="w-full text-xs">
+    <div className="bg-hyper-panel border border-hyper-border rounded overflow-hidden">
+      <div className="overflow-visible">
+        <table className="w-full text-sm">
           <thead className="bg-hyper-panelHover sticky top-0 z-10">
             <tr>
               <th
-                className="px-2 py-1.5 text-left text-[10px] font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
-                onClick={() => onSort('eventTitle')}
-              >
-                Event <SortIndicator column="eventTitle" />
-              </th>
-              <th
-                className="px-2 py-1.5 text-left text-[10px] font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                className="px-3 py-2 text-left text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
                 onClick={() => onSort('marketTitle')}
               >
                 Market <SortIndicator column="marketTitle" />
               </th>
               <th
-                className="px-2 py-1.5 text-left text-[10px] font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                className="px-3 py-2 text-left text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
                 onClick={() => onSort('outcomeName')}
               >
                 Outcome <SortIndicator column="outcomeName" />
               </th>
               <th
-                className="px-2 py-1.5 text-left text-[10px] font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                className="px-3 py-2 text-left text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
                 onClick={() => onSort('side')}
               >
                 Side <SortIndicator column="side" />
               </th>
               <th
-                className="px-2 py-1.5 text-left text-[10px] font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                className="px-3 py-2 text-left text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
                 onClick={() => onSort('openedAt')}
               >
                 Opened <SortIndicator column="openedAt" />
               </th>
               <th
-                className="px-2 py-1.5 text-left text-[10px] font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                className="px-3 py-2 text-left text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
                 onClick={() => onSort('closedAt')}
               >
                 Closed <SortIndicator column="closedAt" />
@@ -103,37 +97,37 @@ export default function Table({
               {showNumberColumns && (
                 <>
                   <th
-                    className="px-2 py-1.5 text-right text-[10px] font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                    className="px-3 py-2 text-right text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
                     onClick={() => onSort('entryVWAP')}
                   >
                     Entry <SortIndicator column="entryVWAP" />
                   </th>
                   <th
-                    className="px-2 py-1.5 text-right text-[10px] font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                    className="px-3 py-2 text-right text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
                     onClick={() => onSort('exitVWAP')}
                   >
                     Exit <SortIndicator column="exitVWAP" />
                   </th>
                   <th
-                    className="px-2 py-1.5 text-right text-[10px] font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                    className="px-3 py-2 text-right text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
                     onClick={() => onSort('size')}
                   >
                     Size <SortIndicator column="size" />
                   </th>
                   <th
-                    className="px-2 py-1.5 text-right text-[10px] font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                    className="px-3 py-2 text-right text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
                     onClick={() => onSort('realizedPnL')}
                   >
                     PnL <SortIndicator column="realizedPnL" />
                   </th>
                   <th
-                    className="px-2 py-1.5 text-right text-[10px] font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                    className="px-3 py-2 text-right text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
                     onClick={() => onSort('realizedPnLPercent')}
                   >
                     PnL% <SortIndicator column="realizedPnLPercent" />
                   </th>
                   <th
-                    className="px-2 py-1.5 text-right text-[10px] font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                    className="px-3 py-2 text-right text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
                     onClick={() => onSort('tradesCount')}
                   >
                     # <SortIndicator column="tradesCount" />
@@ -152,93 +146,74 @@ export default function Table({
                 onClick={() => onSelectPosition(pos)}
               >
                 <td 
-                  className="px-2 py-1.5 text-hyper-textPrimary max-w-[120px] truncate" 
-                  title={pos.eventTitle || '-'}
+                  className="px-3 py-2 text-hyper-textPrimary max-w-[200px] truncate" 
+                  title={pos.marketTitle || '-'}
                 >
-                  <div className="flex items-center gap-1.5 group">
+                  <div className="flex items-center gap-2">
                     {pos.icon && (
                       <img 
                         src={pos.icon} 
                         alt="" 
-                        className="w-4 h-4 rounded object-cover flex-shrink-0"
+                        className="w-6 h-6 rounded object-cover flex-shrink-0"
                         onError={(e) => {
                           (e.target as HTMLImageElement).style.display = 'none';
                         }}
                       />
                     )}
-                    {(pos.eventSlug || pos.eventTitle) ? (
+                    {(pos.slug || pos.conditionId || pos.marketTitle) ? (
                       <span 
                         className="truncate hover:text-hyper-accent transition-colors cursor-pointer"
                         onClick={(e) => {
                           e.stopPropagation();
-                          const url = getPolymarketUrl(pos, 'event');
+                          const url = getPolymarketUrl(pos, 'market');
                           if (url !== '#') window.open(url, '_blank');
                         }}
                       >
-                        {pos.eventTitle || '-'}
+                        {pos.marketTitle || '-'}
                       </span>
                     ) : (
                       <span className="truncate">-</span>
                     )}
                   </div>
                 </td>
-                <td 
-                  className="px-2 py-1.5 text-hyper-textPrimary max-w-[150px] truncate" 
-                  title={pos.marketTitle || '-'}
-                >
-                  {(pos.slug || pos.conditionId || pos.marketTitle) ? (
-                    <span 
-                      className="truncate hover:text-hyper-accent transition-colors cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        const url = getPolymarketUrl(pos, 'market');
-                        if (url !== '#') window.open(url, '_blank');
-                      }}
-                    >
-                      {pos.marketTitle || '-'}
-                    </span>
-                  ) : (
-                    <span className="truncate">-</span>
-                  )}
-                </td>
-                <td className="px-2 py-1.5 text-hyper-textPrimary max-w-[45px] truncate" title={pos.outcomeName || pos.outcome}>
+                <td className="px-3 py-2 text-hyper-textPrimary max-w-[80px] truncate" title={pos.outcomeName || pos.outcome}>
                   {pos.outcomeName || pos.outcome}
                 </td>
-                <td className="px-2 py-1.5">
-                  <span className={`px-1 py-0.5 rounded text-[10px] font-medium ${
+                <td className="px-3 py-2">
+                  <span className={`px-2 py-1 rounded text-xs font-medium ${
                     pos.side === 'Long YES' ? 'bg-hyper-accent/20 text-hyper-accent' : 'bg-hyper-negative/20 text-hyper-negative'
                   }`}>
                     {pos.side === 'Long YES' ? 'YES' : 'NO'}
                   </span>
                 </td>
-                <td className="px-2 py-1.5 text-hyper-textSecondary">
+                <td className="px-3 py-2 text-hyper-textSecondary">
                   {new Date(pos.openedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                 </td>
-                <td className="px-2 py-1.5 text-hyper-textSecondary">
+                <td className="px-3 py-2 text-hyper-textSecondary">
                   {pos.closedAt ? new Date(pos.closedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '-'}
                 </td>
                 {showNumberColumns && (
                   <>
-                    <td className="px-2 py-1.5 text-right font-mono-numeric text-hyper-textPrimary">
+                    <td className="px-3 py-2 text-right font-mono-numeric text-hyper-textPrimary">
                       {pos.entryVWAP.toFixed(3)}
                     </td>
-                    <td className="px-2 py-1.5 text-right font-mono-numeric text-hyper-textPrimary">
+                    <td className="px-3 py-2 text-right font-mono-numeric text-hyper-textPrimary">
                       {pos.exitVWAP.toFixed(3)}
                     </td>
-                    <td className="px-2 py-1.5 text-right font-mono-numeric text-hyper-textPrimary">
+                    <td className="px-3 py-2 text-right font-mono-numeric text-hyper-textPrimary">
                       {formatNumberWithCommas(pos.size, 1)}
                     </td>
-                    <td className={`px-2 py-1.5 text-right font-mono-numeric font-medium ${
+                    <td className={`px-3 py-2 text-right font-mono-numeric font-medium ${
                       pos.realizedPnL >= 0 ? 'text-hyper-positive' : 'text-hyper-negative'
                     }`}>
                       ${formatNumber(pos.realizedPnL)}
                     </td>
-                    <td className={`px-2 py-1.5 text-right font-mono-numeric font-medium ${
+                    <td className={`px-3 py-2 text-right font-mono-numeric font-medium ${
                       pos.realizedPnLPercent >= 0 ? 'text-hyper-positive' : 'text-hyper-negative'
                     }`}>
                       {pos.realizedPnLPercent >= 0 ? '+' : ''}{pos.realizedPnLPercent.toFixed(1)}%
                     </td>
-                    <td className="px-2 py-1.5 text-right font-mono-numeric text-hyper-textPrimary">
+                    <td className="px-3 py-2 text-right font-mono-numeric text-hyper-textPrimary">
                       {pos.tradesCount.toLocaleString('en-US')}
                     </td>
                   </>
