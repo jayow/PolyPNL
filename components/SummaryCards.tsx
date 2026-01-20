@@ -36,88 +36,140 @@ function formatDays(days: number): string {
   }
 }
 
-interface SummaryCardsContainerProps {
+interface StatCardProps {
+  variant?: 'hero' | 'mini';
+  label: string;
+  value: React.ReactNode;
+  secondary?: string;
+  className?: string;
+}
+
+function StatCard({ variant = 'mini', label, value, secondary, className = '' }: StatCardProps) {
+  if (variant === 'hero') {
+    return (
+      <div className={`bg-hyper-panel border border-hyper-border rounded p-3 ${className}`}>
+        <div className="text-[9px] text-hyper-textSecondary mb-1 uppercase tracking-wide">{label}</div>
+        <div className="mb-0.5">{value}</div>
+        {secondary && (
+          <div className="text-[9px] text-hyper-textSecondary opacity-70">{secondary}</div>
+        )}
+        {/* Sparkline placeholder area */}
+        <div className="mt-2 h-8 border-t border-hyper-border opacity-30"></div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className={`bg-hyper-panel border border-hyper-border rounded p-2 ${className}`}>
+      <div className="text-[10px] text-hyper-textSecondary mb-0.5">{label}</div>
+      <div>{value}</div>
+    </div>
+  );
+}
+
+interface SummaryCardsLayoutProps {
   summary: PositionSummary;
-  children?: React.ReactNode;
+  variant?: 'hero' | 'mini' | 'all';
+}
+
+export function SummaryCardsLayout({ summary, variant = 'all' }: SummaryCardsLayoutProps) {
+  const heroCards = (
+    <>
+      <StatCard
+        variant="hero"
+        label="Total PnL"
+        value={
+          <div className={`text-xl font-mono-numeric font-semibold ${
+            summary.totalRealizedPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
+          }`}>
+            ${formatNumber(summary.totalRealizedPnL)}
+          </div>
+        }
+        secondary="Realized PnL"
+      />
+      <StatCard
+        variant="hero"
+        label="Win Rate"
+        value={
+          <div className="text-xl font-mono-numeric font-semibold text-hyper-accent">
+            {summary.winrate.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+          </div>
+        }
+        secondary={`${summary.totalPositionsClosed} positions`}
+      />
+      <StatCard
+        variant="hero"
+        label="Positions"
+        value={
+          <div className="text-xl font-mono-numeric font-semibold text-hyper-textPrimary">
+            {summary.totalPositionsClosed.toLocaleString('en-US')}
+          </div>
+        }
+        secondary="Closed positions"
+      />
+    </>
+  );
+
+  const miniCards = (
+    <>
+      <StatCard
+        label="Avg PnL"
+        value={
+          <div className={`text-sm font-mono-numeric font-medium ${
+            summary.avgPnLPerPosition >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
+          }`}>
+            ${formatNumber(summary.avgPnLPerPosition)}
+          </div>
+        }
+      />
+      <StatCard
+        label="Avg Pos Size"
+        value={
+          <div className="text-sm font-mono-numeric font-medium text-hyper-textPrimary">
+            {formatNumber(summary.avgPosSize, 1)}
+          </div>
+        }
+      />
+      <StatCard
+        label="Avg Holding"
+        value={
+          <div className="text-sm font-mono-numeric font-medium text-hyper-textPrimary">
+            {summary.avgHoldingTime > 0 ? formatDays(summary.avgHoldingTime) : '-'}
+          </div>
+        }
+      />
+      <StatCard
+        label="Top Category"
+        value={
+          <div className="text-sm font-medium text-hyper-textPrimary truncate" title={summary.mostUsedCategory}>
+            {summary.mostUsedCategory}
+          </div>
+        }
+      />
+      <StatCard
+        label="Biggest Win"
+        value={
+          <div className="text-sm font-mono-numeric font-medium text-hyper-accent">
+            ${formatNumber(summary.biggestWin)}
+          </div>
+        }
+      />
+      <StatCard
+        label="Biggest Loss"
+        value={
+          <div className="text-sm font-mono-numeric font-medium text-hyper-negative">
+            ${formatNumber(summary.biggestLoss)}
+          </div>
+        }
+      />
+    </>
+  );
+
+  if (variant === 'hero') return heroCards;
+  if (variant === 'mini') return miniCards;
+  return <>{heroCards}{miniCards}</>;
 }
 
 export default function SummaryCards({ summary }: SummaryCardsProps) {
-  return (
-    <>
-      <div className="bg-hyper-panel border border-hyper-border rounded p-2">
-        <div className="text-[10px] text-hyper-textSecondary mb-0.5">Total PnL</div>
-        <div className={`text-sm font-mono-numeric font-medium ${
-          summary.totalRealizedPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
-        }`}>
-          ${formatNumber(summary.totalRealizedPnL)}
-        </div>
-      </div>
-      
-      <div className="bg-hyper-panel border border-hyper-border rounded p-2">
-        <div className="text-[10px] text-hyper-textSecondary mb-0.5">Win Rate</div>
-        <div className="text-sm font-mono-numeric font-medium text-hyper-accent">
-          {summary.winrate.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
-        </div>
-      </div>
-      
-      <div className="bg-hyper-panel border border-hyper-border rounded p-2">
-        <div className="text-[10px] text-hyper-textSecondary mb-0.5">Avg PnL</div>
-        <div className={`text-sm font-mono-numeric font-medium ${
-          summary.avgPnLPerPosition >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
-        }`}>
-          ${formatNumber(summary.avgPnLPerPosition)}
-        </div>
-      </div>
-      
-      <div className="bg-hyper-panel border border-hyper-border rounded p-2">
-        <div className="text-[10px] text-hyper-textSecondary mb-0.5">Positions</div>
-        <div className="text-sm font-mono-numeric font-medium text-hyper-textPrimary">
-          {summary.totalPositionsClosed.toLocaleString('en-US')}
-        </div>
-      </div>
-      
-      <div className="bg-hyper-panel border border-hyper-border rounded p-2">
-        <div className="text-[10px] text-hyper-textSecondary mb-0.5">Avg Pos Size</div>
-        <div className="text-sm font-mono-numeric font-medium text-hyper-textPrimary">
-          {formatNumber(summary.avgPosSize, 1)}
-        </div>
-      </div>
-      
-      <div className="bg-hyper-panel border border-hyper-border rounded p-2">
-        <div className="text-[10px] text-hyper-textSecondary mb-0.5">Avg Holding</div>
-        <div className="text-sm font-mono-numeric font-medium text-hyper-textPrimary">
-          {summary.avgHoldingTime > 0 ? formatDays(summary.avgHoldingTime) : '-'}
-        </div>
-      </div>
-      
-      <div className="bg-hyper-panel border border-hyper-border rounded p-2">
-        <div className="text-[10px] text-hyper-textSecondary mb-0.5">Top Category</div>
-        <div className="text-sm font-medium text-hyper-textPrimary truncate" title={summary.mostUsedCategory}>
-          {summary.mostUsedCategory}
-        </div>
-        <div className="text-[10px] text-hyper-textSecondary mb-0.5 mt-1">Top Tags</div>
-        <div className="text-xs font-medium text-hyper-textPrimary truncate" title={summary.topTags && summary.topTags.length > 0 ? summary.topTags.join(', ') : summary.mostUsedTag || '-'}>
-          {summary.topTags && summary.topTags.length > 0 ? (
-            summary.topTags.join(', ')
-          ) : (
-            summary.mostUsedTag || '-'
-          )}
-        </div>
-      </div>
-      
-      <div className="bg-hyper-panel border border-hyper-border rounded p-2">
-        <div className="text-[10px] text-hyper-textSecondary mb-0.5">Biggest Win</div>
-        <div className="text-sm font-mono-numeric font-medium text-hyper-accent">
-          ${formatNumber(summary.biggestWin)}
-        </div>
-      </div>
-      
-      <div className="bg-hyper-panel border border-hyper-border rounded p-2">
-        <div className="text-[10px] text-hyper-textSecondary mb-0.5">Biggest Loss</div>
-        <div className="text-sm font-mono-numeric font-medium text-hyper-negative">
-          ${formatNumber(summary.biggestLoss)}
-        </div>
-      </div>
-    </>
-  );
+  return <SummaryCardsLayout summary={summary} variant="all" />;
 }

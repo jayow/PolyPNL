@@ -55,70 +55,70 @@ export default function YesNoAnalytics({ positions }: YesNoAnalyticsProps) {
 
   return (
     <>
-      {/* YES Card */}
-      <div className="bg-hyper-panel border border-hyper-border rounded p-2.5">
-        <div className="text-[10px] text-hyper-textSecondary mb-1.5 font-medium">Long YES</div>
-        <div className="space-y-1">
+      {/* YES Card - Mini variant */}
+      <div className="bg-hyper-panel border border-hyper-border rounded p-2">
+        <div className="text-[10px] text-hyper-textSecondary mb-1 font-medium">Long YES</div>
+        <div className="space-y-0.5">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-hyper-textSecondary">PnL</span>
-            <span className={`text-sm font-mono-numeric font-medium ${
+            <span className="text-[9px] text-hyper-textSecondary">PnL</span>
+            <span className={`text-xs font-mono-numeric font-medium ${
               analytics.yes.pnl >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(analytics.yes.pnl)}
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-hyper-textSecondary">WR</span>
-            <span className="text-sm font-mono-numeric font-medium text-hyper-textPrimary">
+            <span className="text-[9px] text-hyper-textSecondary">WR</span>
+            <span className="text-xs font-mono-numeric font-medium text-hyper-textPrimary">
               {analytics.yes.winRate.toFixed(1)}%
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-hyper-textSecondary">Avg</span>
-            <span className={`text-sm font-mono-numeric font-medium ${
+            <span className="text-[9px] text-hyper-textSecondary">Avg</span>
+            <span className={`text-xs font-mono-numeric font-medium ${
               analytics.yes.avgPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(analytics.yes.avgPnL)}
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-hyper-textSecondary">Cnt</span>
-            <span className="text-sm font-mono-numeric font-medium text-hyper-textPrimary">
+            <span className="text-[9px] text-hyper-textSecondary">Cnt</span>
+            <span className="text-xs font-mono-numeric font-medium text-hyper-textPrimary">
               {analytics.yes.count.toLocaleString('en-US')}
             </span>
           </div>
         </div>
       </div>
 
-      {/* NO Card */}
-      <div className="bg-hyper-panel border border-hyper-border rounded p-2.5">
-        <div className="text-[10px] text-hyper-textSecondary mb-1.5 font-medium">Long NO</div>
-        <div className="space-y-1">
+      {/* NO Card - Mini variant */}
+      <div className="bg-hyper-panel border border-hyper-border rounded p-2">
+        <div className="text-[10px] text-hyper-textSecondary mb-1 font-medium">Long NO</div>
+        <div className="space-y-0.5">
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-hyper-textSecondary">PnL</span>
-            <span className={`text-sm font-mono-numeric font-medium ${
+            <span className="text-[9px] text-hyper-textSecondary">PnL</span>
+            <span className={`text-xs font-mono-numeric font-medium ${
               analytics.no.pnl >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(analytics.no.pnl)}
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-hyper-textSecondary">WR</span>
-            <span className="text-sm font-mono-numeric font-medium text-hyper-textPrimary">
+            <span className="text-[9px] text-hyper-textSecondary">WR</span>
+            <span className="text-xs font-mono-numeric font-medium text-hyper-textPrimary">
               {analytics.no.winRate.toFixed(1)}%
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-hyper-textSecondary">Avg</span>
-            <span className={`text-sm font-mono-numeric font-medium ${
+            <span className="text-[9px] text-hyper-textSecondary">Avg</span>
+            <span className={`text-xs font-mono-numeric font-medium ${
               analytics.no.avgPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(analytics.no.avgPnL)}
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <span className="text-[10px] text-hyper-textSecondary">Cnt</span>
-            <span className="text-sm font-mono-numeric font-medium text-hyper-textPrimary">
+            <span className="text-[9px] text-hyper-textSecondary">Cnt</span>
+            <span className="text-xs font-mono-numeric font-medium text-hyper-textPrimary">
               {analytics.no.count.toLocaleString('en-US')}
             </span>
           </div>
