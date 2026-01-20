@@ -328,6 +328,116 @@ export async function resolveProxyWallet(wallet: string): Promise<{
 }
 
 /**
+ * Fetch user activity (simpler than trades API for getting first BUY timestamps)
+ * Uses the activity API which can filter by type=TRADE and side=BUY
+ * @see https://docs.polymarket.com/api-reference/core/get-user-activity
+ */
+export async function fetchUserActivity(
+  userAddress: string,
+  options: {
+    type?: string[];
+    side?: 'BUY' | 'SELL';
+    sortBy?: 'TIMESTAMP' | 'TOKENS' | 'CASH';
+    sortDirection?: 'ASC' | 'DESC';
+    limit?: number;
+  } = {}
+): Promise<Array<{
+  timestamp: number;
+  conditionId: string;
+  outcome: string;
+  outcomeIndex?: number;
+  side?: 'BUY' | 'SELL';
+  type: string;
+  [key: string]: any;
+}>> {
+  const allActivities: any[] = [];
+  let offset = 0;
+  const pageSize = Math.min(options.limit || 100, 500); // API max is 500
+  const maxOffset = 10000; // API max offset
+
+  console.log(`[API] Fetching user activity for: ${userAddress}`, options);
+
+  while (offset < maxOffset && (!options.limit || allActivities.length < options.limit)) {
+    try {
+      const params = new URLSearchParams({
+        user: userAddress.toLowerCase(),
+        limit: pageSize.toString(),
+        offset: offset.toString(),
+        sortBy: options.sortBy || 'TIMESTAMP',
+        sortDirection: options.sortDirection || 'ASC',
+      });
+
+      // Only add type filter if provided and not empty
+      // If no type filter, API should return all activity types
+      if (options.type && options.type.length > 0) {
+        options.type.forEach(t => params.append('type', t));
+      }
+      // If no type specified, don't add type parameter - fetch all types
+
+      if (options.side) {
+        params.append('side', options.side);
+      }
+
+      console.log(`[API] Fetching activity offset ${offset} for user: ${userAddress}`);
+      
+      const response = await fetchWithTimeout(
+        `${DATA_API_BASE}/activity?${params.toString()}`,
+        {
+          headers: {
+            'Accept': 'application/json',
+          },
+        },
+        15000 // 15 second timeout per page
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => response.statusText);
+        console.error(`[API] Activity fetch failed (offset ${offset}): ${response.status} ${errorText}`);
+        
+        // If we have some activities, return them; otherwise throw
+        if (allActivities.length === 0) {
+          throw new Error(`Failed to fetch user activity: ${response.status} ${errorText}`);
+        }
+        break;
+      }
+
+      const data: any[] = await response.json();
+      console.log(`[API] Found ${data.length} activities at offset ${offset}`);
+
+      if (!Array.isArray(data) || data.length === 0) {
+        break;
+      }
+
+      // Add activities to result
+      for (const activity of data) {
+        allActivities.push(activity);
+      }
+
+      // If we got fewer than pageSize, we've reached the end
+      if (data.length < pageSize) {
+        break;
+      }
+
+      offset += pageSize;
+
+      // Check if we've reached the limit
+      if (options.limit && allActivities.length >= options.limit) {
+        break;
+      }
+    } catch (error) {
+      console.error(`[API] Error fetching activity at offset ${offset}:`, error);
+      if (allActivities.length === 0) {
+        throw error;
+      }
+      break;
+    }
+  }
+
+  console.log(`[API] Total activities fetched: ${allActivities.length}`);
+  return allActivities;
+}
+
+/**
  * Fetch all trades for a user with pagination
  */
 export async function fetchAllTrades(
@@ -541,6 +651,9 @@ export function normalizeTrade(trade: PolymarketTrade, userAddress: string): Nor
     eventTitle: trade.eventTitle,
     marketTitle: trade.marketTitle,
     outcomeName: trade.outcomeName,
+    eventSlug: trade.eventSlug,
+    slug: trade.slug,
+    icon: trade.icon,
   };
 }
 
@@ -745,6 +858,9 @@ export async function fetchClosedPositions(
           realizedPnL: pos.realizedPnl,
           realizedPnLPercent: realizedPnLPercent,
           tradesCount: 1, // API doesn't provide trade count, default to 1
+          eventSlug: pos.eventSlug,
+          slug: pos.slug,
+          icon: pos.icon,
         };
 
         // Filter by date range if provided (client-side filtering)

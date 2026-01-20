@@ -44,6 +44,9 @@ export interface NormalizedTrade {
   eventTitle?: string;
   marketTitle?: string;
   outcomeName?: string;
+  eventSlug?: string;
+  slug?: string;
+  icon?: string;
 }
 
 export interface TradeLot {
@@ -69,6 +72,9 @@ export interface ClosedPosition {
   tradesCount: number;
   open_qty_remaining?: number;
   avg_entry_price_open?: number;
+  eventSlug?: string;
+  slug?: string;
+  icon?: string;
 }
 
 export interface PositionSummary {
@@ -78,6 +84,9 @@ export interface PositionSummary {
   totalPositionsClosed: number;
   biggestWin: number;
   biggestLoss: number;
+  avgPosSize: number;
+  avgHoldingTime: number; // in days
+  mostUsedCategory: string;
 }
 
 export interface MarketMetadata {

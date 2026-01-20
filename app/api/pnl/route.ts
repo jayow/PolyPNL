@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, normalizeTrade, enrichTradesWithMetadata } from '@/lib/api-client';
+import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActivity, normalizeTrade, enrichTradesWithMetadata } from '@/lib/api-client';
 import { FIFOPnLEngine } from '@/lib/pnl-engine';
 import { ClosedPosition, PositionSummary } from '@/types';
 
@@ -40,6 +40,121 @@ export async function GET(request: NextRequest) {
       // If API doesn't work, fall back to computing from trades
       if (closedPositions.length === 0) {
         throw new Error('No closed positions from API, falling back to trade computation');
+      }
+
+      // Enhance positions with accurate open times and trade counts from user activity
+      // The closed-positions API doesn't provide open times or trade counts, so we use the activity API
+      console.log(`[API /pnl] Enhancing positions with open times and trade counts from user activity...`);
+      try {
+        // Fetch all TRADE activities (both BUY and SELL) to get:
+        // 1. First BUY timestamp for each position (for holding time)
+        // 2. Total trade count for each position
+        const allTradeActivities = await fetchUserActivity(userAddress, {
+          type: ['TRADE'],
+          sortBy: 'TIMESTAMP',
+          sortDirection: 'ASC',
+          limit: 10000, // Higher limit to get all trades for accurate counts
+        });
+        console.log(`[API /pnl] Fetched ${allTradeActivities.length} trade activities for enhancement`);
+        
+        if (allTradeActivities.length > 0) {
+          // Create maps for first BUY times and trade counts
+          const firstBuyTimes = new Map<string, string>();
+          const tradeCounts = new Map<string, number>();
+          
+          for (const activity of allTradeActivities) {
+            // Extract outcome from activity (could be outcome, outcomeIndex, or asset)
+            const outcome = activity.outcome || 
+                          (activity.outcomeIndex !== undefined ? activity.outcomeIndex.toString() : '0') ||
+                          (activity.asset ? activity.asset.split(':')[1] : '0');
+            const conditionId = activity.conditionId;
+            
+            if (!conditionId) continue;
+            
+            const key = `${conditionId}:${outcome}`;
+            
+            // Count all trades for this position (BUY and SELL)
+            tradeCounts.set(key, (tradeCounts.get(key) || 0) + 1);
+            
+            // Track first BUY timestamp (for holding time calculation)
+            if (activity.side === 'BUY' && !firstBuyTimes.has(key)) {
+              // Convert timestamp to ISO string if it's a number
+              const timestamp = typeof activity.timestamp === 'number' 
+                ? new Date(activity.timestamp * 1000).toISOString() // API returns seconds, convert to ms
+                : activity.timestamp;
+              firstBuyTimes.set(key, timestamp);
+            }
+          }
+
+          // Update closed positions with accurate open times and trade counts
+          let enhancedTimeCount = 0;
+          let enhancedTradeCount = 0;
+          closedPositions = closedPositions.map(pos => {
+            const key = `${pos.conditionId}:${pos.outcome}`;
+            const firstBuyTime = firstBuyTimes.get(key);
+            const tradeCount = tradeCounts.get(key);
+            
+            const updates: Partial<ClosedPosition> = {};
+            
+            if (firstBuyTime) {
+              updates.openedAt = firstBuyTime;
+              enhancedTimeCount++;
+            }
+            
+            if (tradeCount !== undefined) {
+              updates.tradesCount = tradeCount;
+              enhancedTradeCount++;
+            }
+            
+            if (Object.keys(updates).length > 0) {
+              return { ...pos, ...updates };
+            }
+            return pos;
+          });
+          
+          console.log(`[API /pnl] Enhanced ${enhancedTimeCount} positions with open times, ${enhancedTradeCount} with trade counts from activity API`);
+        }
+      } catch (activityError) {
+        console.warn(`[API /pnl] Failed to fetch activity for open time enhancement:`, activityError);
+        // Fallback to trades API if activity API fails
+        console.log(`[API /pnl] Falling back to trades API for open time enhancement...`);
+        try {
+          const rawTrades = await fetchAllTrades(userAddress, undefined, undefined);
+          console.log(`[API /pnl] Fetched ${rawTrades.length} trades for open time calculation (fallback)`);
+          
+          if (rawTrades.length > 0) {
+            const firstBuyTimes = new Map<string, string>();
+            const normalizedTrades = rawTrades.map(trade => normalizeTrade(trade, userAddress));
+            
+            for (const trade of normalizedTrades) {
+              if (trade.side === 'BUY') {
+                const key = `${trade.conditionId}:${trade.outcome}`;
+                const existingTime = firstBuyTimes.get(key);
+                const tradeTime = new Date(trade.timestamp).getTime();
+                
+                if (!existingTime || tradeTime < new Date(existingTime).getTime()) {
+                  firstBuyTimes.set(key, trade.timestamp);
+                }
+              }
+            }
+
+            closedPositions = closedPositions.map(pos => {
+              const key = `${pos.conditionId}:${pos.outcome}`;
+              const firstBuyTime = firstBuyTimes.get(key);
+              
+              if (firstBuyTime) {
+                return {
+                  ...pos,
+                  openedAt: firstBuyTime,
+                };
+              }
+              return pos;
+            });
+          }
+        } catch (tradeError) {
+          console.warn(`[API /pnl] Failed to fetch trades for open time enhancement (fallback):`, tradeError);
+          // Continue with closed positions as-is if both fail
+        }
       }
     } catch (apiError) {
       console.log(`[API /pnl] Closed positions API failed, falling back to trade computation:`, apiError);
@@ -125,6 +240,9 @@ function calculateSummary(positions: ClosedPosition[]): PositionSummary {
       totalPositionsClosed: 0,
       biggestWin: 0,
       biggestLoss: 0,
+      avgPosSize: 0,
+      avgHoldingTime: 0,
+      mostUsedCategory: '-',
     };
   }
 
@@ -137,6 +255,61 @@ function calculateSummary(positions: ClosedPosition[]): PositionSummary {
   const biggestWin = Math.max(...pnls, 0);
   const biggestLoss = Math.min(...pnls, 0);
 
+  // Calculate average position size
+  const totalSize = positions.reduce((sum, pos) => sum + pos.size, 0);
+  const avgPosSize = totalSize / positions.length;
+
+  // Calculate average holding time (in days)
+  // Filter for positions with valid close dates AND different open/close times
+  const positionsWithValidHoldingTime = positions.filter(pos => {
+    if (!pos.closedAt) return false;
+    const openDate = new Date(pos.openedAt);
+    const closeDate = new Date(pos.closedAt);
+    // Skip positions where open and close times are identical or very close (within 1 minute)
+    // This happens when using the API endpoint that doesn't provide open times
+    const timeDiff = Math.abs(closeDate.getTime() - openDate.getTime());
+    return timeDiff > 60000; // More than 1 minute difference
+  });
+  
+  let avgHoldingTime = 0;
+  if (positionsWithValidHoldingTime.length > 0) {
+    const totalHoldingTime = positionsWithValidHoldingTime.reduce((sum, pos) => {
+      const openDate = new Date(pos.openedAt);
+      const closeDate = new Date(pos.closedAt!);
+      const days = (closeDate.getTime() - openDate.getTime()) / (1000 * 60 * 60 * 24);
+      return sum + Math.max(0, days); // Ensure non-negative
+    }, 0);
+    avgHoldingTime = totalHoldingTime / positionsWithValidHoldingTime.length;
+  }
+
+  // Find most used category (extract from eventTitle)
+  const categoryCounts = new Map<string, number>();
+  positions.forEach(pos => {
+    const eventTitle = pos.eventTitle || '';
+    // Extract category - use the first part before a dash or colon, or use first word
+    let category = eventTitle.split(' - ')[0].split(':')[0].trim();
+    if (!category) {
+      category = pos.marketTitle?.split(' - ')[0]?.split(':')[0]?.trim() || 'Unknown';
+    }
+    if (category) {
+      categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+    }
+  });
+  
+  let mostUsedCategory = '-';
+  let maxCount = 0;
+  categoryCounts.forEach((count, category) => {
+    if (count > maxCount) {
+      maxCount = count;
+      mostUsedCategory = category;
+    }
+  });
+
+  // Truncate category if too long
+  if (mostUsedCategory.length > 20) {
+    mostUsedCategory = mostUsedCategory.substring(0, 17) + '...';
+  }
+
   return {
     totalRealizedPnL,
     winrate,
@@ -144,5 +317,8 @@ function calculateSummary(positions: ClosedPosition[]): PositionSummary {
     totalPositionsClosed: positions.length,
     biggestWin,
     biggestLoss,
+    avgPosSize,
+    avgHoldingTime,
+    mostUsedCategory,
   };
 }

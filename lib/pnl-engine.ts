@@ -129,12 +129,15 @@ export class FIFOPnLEngine {
         this.closedPositions.set(key, []);
       }
 
+      // Get metadata from the first trade for this position
+      const firstTrade = position.trades[0];
+      
       const closedPosition: ClosedPosition = {
         conditionId: trade.conditionId,
         outcome: trade.outcome,
-        eventTitle: trade.eventTitle,
-        marketTitle: trade.marketTitle,
-        outcomeName: trade.outcomeName,
+        eventTitle: trade.eventTitle || firstTrade?.eventTitle,
+        marketTitle: trade.marketTitle || firstTrade?.marketTitle,
+        outcomeName: trade.outcomeName || firstTrade?.outcomeName,
         side: this.determineSide(trade.outcome),
         openedAt: position.firstBuyTime,
         closedAt: position.netQty === 0 ? trade.timestamp : null,
@@ -148,6 +151,9 @@ export class FIFOPnLEngine {
         avg_entry_price_open: position.netQty > 0 
           ? (position.totalBuyValue - totalCostBasis) / position.netQty 
           : undefined,
+        eventSlug: trade.eventSlug || firstTrade?.eventSlug,
+        slug: trade.slug || firstTrade?.slug,
+        icon: trade.icon || firstTrade?.icon,
       };
 
       this.closedPositions.get(key)!.push(closedPosition);
