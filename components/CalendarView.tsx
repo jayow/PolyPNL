@@ -207,39 +207,39 @@ export default function CalendarView({ positions }: CalendarViewProps) {
     return (
       <div className="h-full flex flex-col min-h-0">
         {/* Month Header */}
-        <div className="flex items-center justify-between mb-1 flex-shrink-0">
-          <div className="flex items-center gap-1.5">
+        <div className="flex items-center justify-between mb-2 flex-shrink-0">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => navigateMonth('prev')}
-              className="px-1.5 py-0.5 text-hyper-textSecondary hover:text-hyper-textPrimary hover:bg-hyper-panelHover rounded transition-colors text-[10px]"
+              className="px-2.5 py-1.5 text-hyper-textSecondary hover:text-hyper-textPrimary hover:bg-hyper-panelHover rounded transition-colors text-sm"
             >
               ←
             </button>
-            <h3 className="text-[10px] font-medium text-hyper-textPrimary">{monthDisplay}</h3>
+            <h3 className="text-sm font-medium text-hyper-textPrimary">{monthDisplay}</h3>
             <button
               onClick={() => navigateMonth('next')}
-              className="px-1.5 py-0.5 text-hyper-textSecondary hover:text-hyper-textPrimary hover:bg-hyper-panelHover rounded transition-colors text-[10px]"
+              className="px-2.5 py-1.5 text-hyper-textSecondary hover:text-hyper-textPrimary hover:bg-hyper-panelHover rounded transition-colors text-sm"
             >
               →
             </button>
           </div>
-          <div className="flex items-center gap-1.5">
-            <span className={`text-[10px] font-mono-numeric ${
+          <div className="flex items-center gap-2">
+            <span className={`text-sm font-mono-numeric ${
               totalPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(totalPnL)}
             </span>
-            <span className="text-[9px] text-hyper-textSecondary">
+            <span className="text-xs text-hyper-textSecondary">
               ({monthData?.positions.length ?? 0})
             </span>
           </div>
         </div>
 
         {/* Calendar Grid */}
-        <div className="grid grid-cols-7 gap-0.5 flex-1 min-h-0 auto-rows-fr">
+        <div className="grid grid-cols-7 gap-1.5 flex-1 min-h-0 auto-rows-fr">
           {/* Day Headers */}
           {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
-            <div key={day} className="text-[9px] text-hyper-textSecondary text-center font-medium flex items-center justify-center">
+            <div key={day} className="text-xs text-hyper-textSecondary text-center font-medium flex items-center justify-center">
               {day}
             </div>
           ))}
@@ -281,22 +281,22 @@ export default function CalendarView({ positions }: CalendarViewProps) {
             return (
               <div
                 key={dayData.date}
-                className={`${bgColor} border border-hyper-border rounded p-0.5 flex flex-col justify-between relative group cursor-pointer min-h-0`}
+                className={`${bgColor} border border-hyper-border rounded p-1.5 flex flex-col justify-between relative group cursor-pointer min-h-0`}
               >
-                <div className={`text-[9px] ${textColor} font-medium leading-tight`}>
+                <div className={`text-sm ${textColor} font-medium leading-tight`}>
                   {dayData.day}
                 </div>
-                <div className={`text-[8px] ${pnlColor} font-mono-numeric leading-tight truncate`}>
+                <div className={`text-xs ${pnlColor} font-mono-numeric leading-tight truncate`}>
                   {hasData ? (
                     `$${formatNumber(dayData.pnl!)}`
                   ) : isCurrentMonth ? (
-                    <span className="text-hyper-muted text-[7px]">no trade</span>
+                    <span className="text-hyper-muted text-[10px]">no trade</span>
                   ) : null}
                 </div>
                 
                 {/* Hover Tooltip */}
                 {hasData && (topWins.length > 0 || topLosses.length > 0) && (
-                  <div className="absolute z-10 hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 bg-hyper-panel border border-hyper-border rounded p-2 text-[10px] shadow-lg">
+                  <div className="absolute z-10 hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 mb-2 w-64 bg-hyper-panel border border-hyper-border rounded p-2 text-xs shadow-lg">
                     <div className="text-hyper-textSecondary mb-2 font-medium">
                       {new Date(dayData.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                     </div>
@@ -309,7 +309,7 @@ export default function CalendarView({ positions }: CalendarViewProps) {
                     
                     {topWins.length > 0 && (
                       <div className="mb-2">
-                        <div className="text-hyper-textSecondary mb-1 text-[9px] font-medium">Top Wins:</div>
+                        <div className="text-hyper-textSecondary mb-1 text-[10px] font-medium">Top Wins:</div>
                         <div className="space-y-0.5">
                           {topWins.map((pos, i) => (
                             <div key={i} className="flex justify-between items-start gap-2">
@@ -327,7 +327,7 @@ export default function CalendarView({ positions }: CalendarViewProps) {
                     
                     {topLosses.length > 0 && (
                       <div>
-                        <div className="text-hyper-textSecondary mb-1 text-[9px] font-medium">Top Losses:</div>
+                        <div className="text-hyper-textSecondary mb-1 text-[10px] font-medium">Top Losses:</div>
                         <div className="space-y-0.5">
                           {topLosses.map((pos, i) => (
                             <div key={i} className="flex justify-between items-start gap-2">
@@ -390,8 +390,8 @@ export default function CalendarView({ positions }: CalendarViewProps) {
           .map(([year, months]) => (
             <div key={year}>
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-medium text-hyper-textPrimary">{year}</h3>
-                <div className="text-[10px] text-hyper-textSecondary">
+                <h3 className="text-base font-medium text-hyper-textPrimary">{year}</h3>
+                <div className="text-sm text-hyper-textSecondary">
                   Total: <span className={`font-mono-numeric ${
                     months.reduce((sum, m) => sum + (m.monthData?.pnl ?? 0), 0) >= 0 
                       ? 'text-hyper-accent' 
@@ -435,18 +435,18 @@ export default function CalendarView({ positions }: CalendarViewProps) {
                   }
 
                   return (
-                    <div key={monthKey} className="border border-hyper-border rounded p-2">
+                    <div key={monthKey} className="border border-hyper-border rounded p-2.5">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-[10px] font-medium text-hyper-textPrimary">{monthDisplay}</h4>
-                        <span className={`text-[10px] font-mono-numeric ${
+                        <h4 className="text-sm font-medium text-hyper-textPrimary">{monthDisplay}</h4>
+                        <span className={`text-sm font-mono-numeric ${
                           totalPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
                         }`}>
                           ${formatNumber(totalPnL)}
                         </span>
                       </div>
-                      <div className="grid grid-cols-7 gap-0.5">
+                      <div className="grid grid-cols-7 gap-1">
                         {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map(day => (
-                          <div key={day} className="text-[8px] text-hyper-textSecondary text-center">
+                          <div key={day} className="text-[10px] text-hyper-textSecondary text-center">
                             {day}
                           </div>
                         ))}
@@ -478,13 +478,13 @@ export default function CalendarView({ positions }: CalendarViewProps) {
                           return (
                             <div
                               key={dayData.date || idx}
-                              className={`${bgColor} border border-hyper-border rounded p-0.5 min-h-[20px] flex items-center justify-center text-[7px] group relative cursor-pointer`}
+                              className={`${bgColor} border border-hyper-border rounded p-1 min-h-[28px] flex items-center justify-center text-xs group relative cursor-pointer`}
                             >
                               <span className={pnlColor}>{dayData.day}</span>
                               
                               {/* Hover Tooltip */}
                               {hasData && (topWins.length > 0 || topLosses.length > 0) && (
-                                <div className="absolute z-10 hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 mb-1 w-56 bg-hyper-panel border border-hyper-border rounded p-2 text-[9px] shadow-lg">
+                                <div className="absolute z-10 hidden group-hover:block bottom-full left-1/2 transform -translate-x-1/2 mb-1 w-56 bg-hyper-panel border border-hyper-border rounded p-2 text-xs shadow-lg">
                                   <div className="text-hyper-textSecondary mb-1 font-medium">
                                     {new Date(dayData.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                   </div>
@@ -495,9 +495,9 @@ export default function CalendarView({ positions }: CalendarViewProps) {
                                   </div>
                                   {topWins.length > 0 && (
                                     <div className="mb-1">
-                                      <div className="text-hyper-textSecondary text-[8px] mb-0.5">Top Wins:</div>
+                                      <div className="text-hyper-textSecondary text-[10px] mb-0.5">Top Wins:</div>
                                       {topWins.slice(0, 3).map((pos, i) => (
-                                        <div key={i} className="flex justify-between text-[8px]">
+                                        <div key={i} className="flex justify-between text-[10px]">
                                           <span className="truncate flex-1">{pos.marketTitle || pos.eventTitle || 'Unknown'}</span>
                                           <span className="text-hyper-accent ml-1">${formatNumber(pos.realizedPnL)}</span>
                                         </div>
@@ -506,9 +506,9 @@ export default function CalendarView({ positions }: CalendarViewProps) {
                                   )}
                                   {topLosses.length > 0 && (
                                     <div>
-                                      <div className="text-hyper-textSecondary text-[8px] mb-0.5">Top Losses:</div>
+                                      <div className="text-hyper-textSecondary text-[10px] mb-0.5">Top Losses:</div>
                                       {topLosses.slice(0, 3).map((pos, i) => (
-                                        <div key={i} className="flex justify-between text-[8px]">
+                                        <div key={i} className="flex justify-between text-[10px]">
                                           <span className="truncate flex-1">{pos.marketTitle || pos.eventTitle || 'Unknown'}</span>
                                           <span className="text-hyper-negative ml-1">${formatNumber(pos.realizedPnL)}</span>
                                         </div>
@@ -544,13 +544,13 @@ export default function CalendarView({ positions }: CalendarViewProps) {
   return (
     <div className="bg-hyper-panel border border-hyper-border rounded p-3 h-full flex flex-col">
       <div className="flex items-center justify-between mb-3 flex-shrink-0">
-        <div className="text-[10px] text-hyper-textSecondary font-medium">
+        <div className="text-sm text-hyper-textSecondary font-medium">
           PnL Calendar
         </div>
         <div className="flex items-center gap-1 bg-hyper-bg border border-hyper-border rounded p-0.5">
           <button
             onClick={() => setViewMode('month')}
-            className={`px-2 py-1 rounded text-[10px] transition-colors ${
+            className={`px-3 py-1.5 rounded text-sm transition-colors ${
               viewMode === 'month'
                 ? 'bg-hyper-accent text-hyper-bg'
                 : 'text-hyper-textSecondary hover:text-hyper-textPrimary'
@@ -560,7 +560,7 @@ export default function CalendarView({ positions }: CalendarViewProps) {
           </button>
           <button
             onClick={() => setViewMode('year')}
-            className={`px-2 py-1 rounded text-[10px] transition-colors ${
+            className={`px-3 py-1.5 rounded text-sm transition-colors ${
               viewMode === 'year'
                 ? 'bg-hyper-accent text-hyper-bg'
                 : 'text-hyper-textSecondary hover:text-hyper-textPrimary'
