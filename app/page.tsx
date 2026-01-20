@@ -7,6 +7,7 @@ import SummaryCards from '@/components/SummaryCards';
 import Table from '@/components/Table';
 import DetailsPanel from '@/components/DetailsPanel';
 import PnLGraph from '@/components/PnLGraph';
+import CalendarView from '@/components/CalendarView';
 
 export default function Home() {
   const [wallet, setWallet] = useState('');
@@ -21,6 +22,7 @@ export default function Home() {
   const [sortColumn, setSortColumn] = useState<keyof ClosedPosition | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedPosition, setSelectedPosition] = useState<ClosedPosition | null>(null);
+  const [viewMode, setViewMode] = useState<'chart' | 'calendar'>('chart');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,6 +199,8 @@ export default function Home() {
           setShowNumberColumns={setShowNumberColumns}
           onExport={exportToCSV}
           hasPositions={positions.length > 0}
+          viewMode={viewMode}
+          setViewMode={setViewMode}
         />
 
         {/* Loading State */}
@@ -249,10 +253,14 @@ export default function Home() {
                 {/* Summary Cards */}
                 {summary && <SummaryCards summary={summary} />}
 
-                {/* PnL Graph */}
+                {/* PnL Graph or Calendar View */}
                 {positions.length > 0 && (
                   <div className="mb-2">
-                    <PnLGraph positions={filteredPositions} />
+                    {viewMode === 'chart' ? (
+                      <PnLGraph positions={filteredPositions} />
+                    ) : (
+                      <CalendarView positions={filteredPositions} />
+                    )}
                   </div>
                 )}
 
