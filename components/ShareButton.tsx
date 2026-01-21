@@ -23,13 +23,8 @@ export default function ShareButton({ position }: ShareButtonProps) {
     setShowModal(true);
     setCopySuccess(false);
     setUploadError(null);
-    // Show ShareCard immediately (like hover - instant render)
-    // Generate image in background
     setIsGenerating(false);
     setImageUrl(null);
-    // Reset custom background when opening new share (optional - remove if you want to persist)
-    // setCustomBackground(null);
-    // Start image generation async, but don't block UI
     generateImage();
   };
 
@@ -37,13 +32,11 @@ export default function ShareButton({ position }: ShareButtonProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Check if it's an image
     if (!file.type.startsWith('image/')) {
       setUploadError('Please upload an image file');
       return;
     }
 
-    // Load and fit image to 16:9 ratio
     const img = new Image();
     const reader = new FileReader();
 
@@ -57,11 +50,9 @@ export default function ShareButton({ position }: ShareButtonProps) {
         const sourceRatio = width / height;
         const targetRatio = 16 / 9;
 
-        // Calculate target dimensions (use ShareCard dimensions for consistency)
         const targetWidth = SHARE_W;
         const targetHeight = SHARE_H;
 
-        // Create canvas to crop/scale image to 16:9
         const canvas = document.createElement('canvas');
         canvas.width = targetWidth;
         canvas.height = targetHeight;
@@ -77,36 +68,31 @@ export default function ShareButton({ position }: ShareButtonProps) {
         let sourceWidth = width;
         let sourceHeight = height;
 
-        // Crop to fit 16:9 ratio (center crop)
         if (sourceRatio > targetRatio) {
-          // Image is wider than 16:9 - crop width
           sourceWidth = height * targetRatio;
           sourceX = (width - sourceWidth) / 2;
         } else {
-          // Image is taller than 16:9 - crop height
           sourceHeight = width / targetRatio;
           sourceY = (height - sourceHeight) / 2;
         }
 
-        // Draw the cropped/scaled image
         ctx.drawImage(
           img,
           sourceX, sourceY, sourceWidth, sourceHeight,
           0, 0, targetWidth, targetHeight
         );
 
-        // Convert to data URL
         const fittedDataUrl = canvas.toDataURL('image/jpeg', 0.9);
         
-        // Set as background
         setCustomBackground(fittedDataUrl);
         setUploadError(null);
         
-        // Regenerate image with new background
         if (showModal && !isGenerating) {
-          setIsGenerating(true);
-          setImageUrl(null);
-          generateImage();
+          setTimeout(() => {
+            setIsGenerating(true);
+            setImageUrl(null);
+            generateImage();
+          }, 100);
         }
       };
 
@@ -126,23 +112,22 @@ export default function ShareButton({ position }: ShareButtonProps) {
     setCustomBackground(null);
     setUploadError(null);
     
-    // Regenerate image with default background
     if (showModal && !isGenerating) {
-      setIsGenerating(true);
-      setImageUrl(null);
-      generateImage();
+      // Give React time to update ShareCard with null background
+      setTimeout(() => {
+        setIsGenerating(true);
+        setImageUrl(null);
+        generateImage();
+      }, 100);
     }
   };
 
   const generateImage = async () => {
-    // Show loading state only when we start the actual capture
     setIsGenerating(true);
     setError(null);
     
-    // Wait for fonts to be ready
     await document.fonts.ready;
     
-    // Wait for next frame to ensure layout is complete
     await new Promise(resolve => requestAnimationFrame(resolve));
     await new Promise(resolve => requestAnimationFrame(resolve));
 
@@ -152,7 +137,6 @@ export default function ShareButton({ position }: ShareButtonProps) {
       return;
     }
 
-    // Wait for any images to load first
     const images = element.querySelectorAll('img');
     const imagePromises = Array.from(images).map((img) => {
       if (img.complete && img.naturalWidth > 0) {
@@ -160,7 +144,7 @@ export default function ShareButton({ position }: ShareButtonProps) {
       }
       return new Promise<void>((resolve) => {
         const timeout = setTimeout(() => {
-          resolve(); // Continue even if image fails to load
+          resolve();
         }, 2000);
         
         img.onload = () => {
@@ -169,37 +153,77 @@ export default function ShareButton({ position }: ShareButtonProps) {
         };
         img.onerror = () => {
           clearTimeout(timeout);
-          resolve(); // Continue even if image fails to load
+          resolve();
         };
       });
     });
 
     await Promise.all(imagePromises);
     
-    // One more frame to ensure everything is rendered
     await new Promise(resolve => requestAnimationFrame(resolve));
 
     try {
-      // Convert external images to base64 via proxy to avoid CORS issues
-      const images = Array.from(element.querySelectorAll('img')) as HTMLImageElement[];
+      // Don't override the background - ShareCard already handles it via the customBackground prop
+      // Just ensure the background image is loaded before capture
+      const bgStyle = window.getComputedStyle(element as HTMLElement);
+      const bgImage = bgStyle.backgroundImage;
       
-      for (const img of images) {
+      if (bgImage && bgImage !== 'none' && bgImage.includes('url')) {
+        // Extract URL from backgroundImage style
+        const urlMatch = bgImage.match(/url\(['"]?(.+?)['"]?\)/);
+        if (urlMatch && urlMatch[1]) {
+          const bgUrl = urlMatch[1];
+          
+          // If it's a regular URL (not base64), preload it
+          if (!bgUrl.startsWith('data:')) {
+            try {
+              const bgImg = new Image();
+              bgImg.crossOrigin = 'anonymous';
+              bgImg.src = bgUrl;
+              
+              await new Promise<void>((resolve) => {
+                const timeout = setTimeout(() => resolve(), 3000);
+                bgImg.onload = () => {
+                  clearTimeout(timeout);
+                  resolve();
+                };
+                bgImg.onerror = () => {
+                  clearTimeout(timeout);
+                  resolve();
+                };
+              });
+            } catch (e) {
+              console.warn('Failed to preload background:', e);
+            }
+          }
+        }
+      }
+      
+      // Convert external images to base64 via proxy
+      const imageElements = Array.from(element.querySelectorAll('img')) as HTMLImageElement[];
+      
+      for (const img of imageElements) {
+        if (img.style.display === 'none' || !img.complete || img.naturalWidth === 0) {
+          continue;
+        }
+        
         const originalSrc = img.src;
         
-        // Skip if already base64 or blank
         if (originalSrc.startsWith('data:') || !originalSrc || originalSrc === window.location.href) {
           continue;
         }
         
-        // Store original src
+        const isLocalImage = originalSrc.startsWith('/') && !originalSrc.startsWith('//');
+        if (isLocalImage) {
+          continue;
+        }
+        
         if (!img.dataset.originalSrc) {
           img.dataset.originalSrc = originalSrc;
         }
         
-        // Check if image is from external domain (not our proxy)
         if (!originalSrc.includes('/api/image-proxy')) {
           try {
-            // Convert via proxy
             const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(originalSrc)}`;
             const response = await fetch(proxyUrl);
             
@@ -214,16 +238,13 @@ export default function ShareButton({ position }: ShareButtonProps) {
               img.src = base64;
             }
           } catch (e) {
-            // If proxy fails, fallback will show
             console.warn('Failed to proxy image:', originalSrc);
           }
         }
       }
       
-      // Wait for images to render after conversion
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      // Simply capture the visible ShareCard element as-is using html-to-image
       const dataUrl = await toPng(element as HTMLElement, {
         backgroundColor: '#0B0F14',
         pixelRatio: 2,
@@ -233,7 +254,7 @@ export default function ShareButton({ position }: ShareButtonProps) {
       });
       
       // Restore original image sources
-      for (const img of images) {
+      for (const img of imageElements) {
         if (img.dataset.originalSrc) {
           img.src = img.dataset.originalSrc;
         }
@@ -242,7 +263,7 @@ export default function ShareButton({ position }: ShareButtonProps) {
       // Convert PNG to JPEG
       const img = new Image();
       img.src = dataUrl;
-      await new Promise((resolve, reject) => {
+      await new Promise((resolve) => {
         img.onload = () => {
           const canvas = document.createElement('canvas');
           canvas.width = SHARE_W * 2;
@@ -275,7 +296,6 @@ export default function ShareButton({ position }: ShareButtonProps) {
 
   const handleToggleDollarPnL = (show: boolean) => {
     setShowDollarPnL(show);
-    // Regenerate image when toggle changes
     if (showModal && !isGenerating) {
       setIsGenerating(true);
       setImageUrl(null);
@@ -287,14 +307,12 @@ export default function ShareButton({ position }: ShareButtonProps) {
     if (!imageUrl) return;
     
     try {
-      // ClipboardItem API doesn't support image/jpeg, so convert to PNG
       const img = new Image();
-      img.crossOrigin = 'anonymous'; // Allow CORS if needed
+      img.crossOrigin = 'anonymous';
       img.src = imageUrl;
       
       await new Promise<void>((resolve, reject) => {
         img.onload = () => {
-          // Convert to PNG using canvas
           const canvas = document.createElement('canvas');
           canvas.width = img.naturalWidth || img.width;
           canvas.height = img.naturalHeight || img.height;
@@ -304,23 +322,19 @@ export default function ShareButton({ position }: ShareButtonProps) {
             return;
           }
           
-          // Draw the image onto canvas
           ctx.drawImage(img, 0, 0);
           
-          // Convert canvas to PNG blob
           canvas.toBlob((blob) => {
             if (!blob) {
               reject(new Error('Failed to convert image to blob'));
               return;
             }
             
-            // Check if ClipboardItem is supported
             if (!window.ClipboardItem) {
               reject(new Error('ClipboardItem API is not supported in this browser'));
               return;
             }
             
-            // Use PNG for clipboard (widely supported, unlike JPEG)
             const clipboardItem = new ClipboardItem({ 
               'image/png': blob 
             });
@@ -346,12 +360,10 @@ export default function ShareButton({ position }: ShareButtonProps) {
     } catch (err) {
       console.error('Failed to copy image:', err);
       
-      // Handle specific errors
       if (err instanceof Error) {
         if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
           alert('Clipboard access denied. Please allow clipboard permissions in your browser settings.');
         } else if (err.message.includes('image/jpeg')) {
-          // This shouldn't happen with our new code, but handle it anyway
           alert('Clipboard does not support JPEG. Please try refreshing the page and try again.');
         } else {
           alert(`Failed to copy image: ${err.message}. Please try downloading instead.`);
@@ -423,7 +435,6 @@ export default function ShareButton({ position }: ShareButtonProps) {
                 minHeight: `${SHARE_H + 32}px`,
               }}
             >
-              {/* ShareCard for both preview and export - same node, capture directly */}
               <ShareCard 
                 id={`share-card-${position.conditionId}`}
                 position={position} 
@@ -432,8 +443,6 @@ export default function ShareButton({ position }: ShareButtonProps) {
                 customBackground={customBackground}
               />
               
-              {/* Show ShareCard immediately - numbers appear instantly like hover */}
-              {/* Only show loading overlay when actually generating export image */}
               {isGenerating && (
                 <div className="flex flex-col items-center justify-center absolute inset-0 bg-hyper-bg/80 backdrop-blur-sm z-10">
                   <div className="w-8 h-8 border-2 border-hyper-accent border-t-transparent rounded-full animate-spin mb-4"></div>
@@ -441,7 +450,6 @@ export default function ShareButton({ position }: ShareButtonProps) {
                 </div>
               )}
               
-              {/* Show generated image when ready (optional - ShareCard is already visible) */}
               {!isGenerating && imageUrl && (
                 <img 
                   src={imageUrl} 
@@ -451,7 +459,6 @@ export default function ShareButton({ position }: ShareButtonProps) {
                 />
               )}
               
-              {/* Show error message if generation failed */}
               {error && (
                 <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-red-500/90 text-white px-4 py-2 rounded text-sm z-20">
                   {error}

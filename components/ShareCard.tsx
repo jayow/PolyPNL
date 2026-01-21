@@ -72,7 +72,7 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: '350px 1fr',
+          gridTemplateColumns: '350px 350px',
           columnGap: '24px',
           alignItems: 'center',
           alignContent: 'start',
@@ -94,7 +94,8 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
           justifyContent: 'center',
           width: '100%',
           flexShrink: 0,
-          gap: '16px',
+          gap: '20px',
+          marginLeft: `-${SAFE_PAD*0.5}px`,
         }}>
           <div
             style={{
@@ -146,24 +147,6 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
                 }}
               />
             )}
-          </div>
-          
-          {/* Branding below icon */}
-          <div
-            style={{
-              fontSize: '11px',
-              color: '#E6EDF6',
-              fontWeight: '600',
-              whiteSpace: 'nowrap',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '2px',
-              alignItems: 'center',
-              textAlign: 'center',
-            }}
-          >
-            <div>POLYPNL made by jayowtrades</div>
-            <div>polypnl.hanyon.app</div>
           </div>
         </div>
 
@@ -446,6 +429,26 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Text - Bottom Left */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: `${SAFE_PAD*1.5}px`,
+          left: `${SAFE_PAD * 2.1}px`,
+          zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '2px',
+          textAlign: 'left',
+          fontSize: '11px',
+          color: '#E6EDF6',
+          fontWeight: '600',
+        }}
+      >
+        <div>Get your own PnL at polypnl.hanyon.app</div>
+        <div>Follow us on X @jayowtrades</div>
       </div>
     </div>
   );
