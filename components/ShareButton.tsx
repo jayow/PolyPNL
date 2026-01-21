@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ClosedPosition } from '@/types';
 import ShareCard, { SHARE_W, SHARE_H } from './ShareCard';
-import html2canvas from 'html2canvas';
+import { toPng } from 'html-to-image';
 
 interface ShareButtonProps {
   position: ClosedPosition;
@@ -14,6 +14,7 @@ export default function ShareButton({ position }: ShareButtonProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showDollarPnL, setShowDollarPnL] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleShare = () => {
     setShowModal(true);
@@ -28,6 +29,7 @@ export default function ShareButton({ position }: ShareButtonProps) {
   const generateImage = async () => {
     // Show loading state only when we start the actual capture
     setIsGenerating(true);
+    setError(null);
     
     // Wait for fonts to be ready
     await document.fonts.ready;
@@ -37,53 +39,128 @@ export default function ShareButton({ position }: ShareButtonProps) {
     await new Promise(resolve => requestAnimationFrame(resolve));
 
     const element = document.getElementById(`share-card-${position.conditionId}`);
-    if (element) {
-      // Wait for any images to load first (increased timeout to 2000ms to match ShareCard)
-      const images = element.querySelectorAll('img');
-      const imagePromises = Array.from(images).map((img) => {
-        if (img.complete && img.naturalWidth > 0) {
-          return Promise.resolve();
-        }
-        return new Promise((resolve) => {
-          const timeout = setTimeout(() => {
-            console.warn('[ShareButton] Image load timeout after 2000ms:', img.src);
-            resolve(); // Continue even if image fails to load
-          }, 2000); // 2000ms timeout to match ShareCard export timeout
-          
-          img.onload = () => {
-            clearTimeout(timeout);
-            resolve();
-          };
-          img.onerror = () => {
-            clearTimeout(timeout);
-            resolve(); // Continue even if image fails to load
-          };
-        });
+    if (!element) {
+      setIsGenerating(false);
+      return;
+    }
+
+    // Wait for any images to load first
+    const images = element.querySelectorAll('img');
+    const imagePromises = Array.from(images).map((img) => {
+      if (img.complete && img.naturalWidth > 0) {
+        return Promise.resolve();
+      }
+      return new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          resolve(); // Continue even if image fails to load
+        }, 2000);
+        
+        img.onload = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        img.onerror = () => {
+          clearTimeout(timeout);
+          resolve(); // Continue even if image fails to load
+        };
       });
+    });
 
-      await Promise.all(imagePromises);
+    await Promise.all(imagePromises);
+    
+    // One more frame to ensure everything is rendered
+    await new Promise(resolve => requestAnimationFrame(resolve));
+
+    try {
+      // Convert external images to base64 via proxy to avoid CORS issues
+      const images = Array.from(element.querySelectorAll('img')) as HTMLImageElement[];
       
-      // One more frame to ensure fallback is rendered if needed
-      await new Promise(resolve => requestAnimationFrame(resolve));
-
-      html2canvas(element, {
+      for (const img of images) {
+        const originalSrc = img.src;
+        
+        // Skip if already base64 or blank
+        if (originalSrc.startsWith('data:') || !originalSrc || originalSrc === window.location.href) {
+          continue;
+        }
+        
+        // Store original src
+        if (!img.dataset.originalSrc) {
+          img.dataset.originalSrc = originalSrc;
+        }
+        
+        // Check if image is from external domain (not our proxy)
+        if (!originalSrc.includes('/api/image-proxy')) {
+          try {
+            // Convert via proxy
+            const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(originalSrc)}`;
+            const response = await fetch(proxyUrl);
+            
+            if (response.ok) {
+              const blob = await response.blob();
+              const reader = new FileReader();
+              const base64 = await new Promise<string>((resolve, reject) => {
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+              img.src = base64;
+            }
+          } catch (e) {
+            // If proxy fails, fallback will show
+            console.warn('Failed to proxy image:', originalSrc);
+          }
+        }
+      }
+      
+      // Wait for images to render after conversion
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Simply capture the visible ShareCard element as-is using html-to-image
+      const dataUrl = await toPng(element as HTMLElement, {
         backgroundColor: '#0B0F14',
+        pixelRatio: 2,
+        cacheBust: true,
         width: SHARE_W,
         height: SHARE_H,
-        scale: 1,
-        logging: false,
-        useCORS: true,
-        allowTaint: true,
-        imageTimeout: 5000,
-      }).then((canvas) => {
-        const url = canvas.toDataURL('image/jpeg', 0.9);
-        setImageUrl(url);
-        setIsGenerating(false);
-      }).catch((error) => {
-        console.error('Error generating image:', error);
-        setIsGenerating(false);
       });
-    } else {
+      
+      // Restore original image sources
+      for (const img of images) {
+        if (img.dataset.originalSrc) {
+          img.src = img.dataset.originalSrc;
+        }
+      }
+
+      // Convert PNG to JPEG
+      const img = new Image();
+      img.src = dataUrl;
+      await new Promise((resolve, reject) => {
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = SHARE_W * 2;
+          canvas.height = SHARE_H * 2;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, SHARE_W * 2, SHARE_H * 2);
+            const jpegUrl = canvas.toDataURL('image/jpeg', 0.9);
+            setImageUrl(jpegUrl);
+            setIsGenerating(false);
+            resolve(null);
+          } else {
+            setImageUrl(dataUrl);
+            setIsGenerating(false);
+            resolve(null);
+          }
+        };
+        img.onerror = () => {
+          setImageUrl(dataUrl);
+          setIsGenerating(false);
+          resolve(null);
+        };
+      });
+    } catch (error) {
+      console.error('Error generating image:', error);
+      setError(error instanceof Error ? error.message : 'Failed to generate screenshot');
       setIsGenerating(false);
     }
   };
@@ -173,17 +250,13 @@ export default function ShareButton({ position }: ShareButtonProps) {
                 minHeight: `${SHARE_H + 32}px`,
               }}
             >
-              {/* ShareCard for both preview and export - same node */}
-              <div 
+              {/* ShareCard for both preview and export - same node, capture directly */}
+              <ShareCard 
                 id={`share-card-${position.conditionId}`}
-                className="rounded overflow-hidden"
-              >
-                <ShareCard 
-                  position={position} 
-                  showDollarPnL={showDollarPnL}
-                  debug={process.env.NODE_ENV === 'development'}
-                />
-              </div>
+                position={position} 
+                showDollarPnL={showDollarPnL}
+                debug={process.env.NODE_ENV === 'development'}
+              />
               
               {/* Show ShareCard immediately - numbers appear instantly like hover */}
               {/* Only show loading overlay when actually generating export image */}
@@ -202,6 +275,13 @@ export default function ShareButton({ position }: ShareButtonProps) {
                   className="absolute inset-0 w-full h-full object-contain rounded pointer-events-none opacity-0"
                   style={{ display: 'none' }}
                 />
+              )}
+              
+              {/* Show error message if generation failed */}
+              {error && (
+                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-red-500/90 text-white px-4 py-2 rounded text-sm z-20">
+                  {error}
+                </div>
               )}
             </div>
 

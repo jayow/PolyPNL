@@ -1,0 +1,77 @@
+# Cursor AI Rules
+
+## Problem-Solving Philosophy
+
+### Always Start Simple
+- Try the simplest solution first
+- Only add complexity when you have evidence it's needed
+- If a solution requires 3+ layers of abstraction, reconsider
+
+### Root Cause Analysis
+- Always identify the root cause, not just symptoms
+- Don't treat symptoms - fix the underlying issue
+- If solution feels like a "hack" or "workaround", find the root cause
+
+### Step Back When Stuck
+- After 2-3 failed attempts, step back and reconsider
+- Ask: "Am I fixing the right problem?"
+- Consider completely different approaches
+- Look at the problem from a different angle
+
+### Use the Right Tool
+- Understand what each tool/library is designed for
+- Don't fight the tool - use the right tool for the job
+- If a tool makes something hard, there's probably a better tool
+- Each tool should do what it's good at
+
+## Common Patterns
+
+### CORS Issues
+- **Solution:** Server-side proxy API endpoint
+- **Don't:** Try to work around CORS client-side
+- **Example:** `/api/image-proxy?url=...` for external images
+
+### Image Capture
+- **Solution:** Convert images to base64 before capture
+- **Don't:** Try to capture images with CORS restrictions directly
+- **Pattern:** Proxy → Convert to base64 → Capture element
+
+### Element Screenshots
+- **Solution:** Direct capture of rendered element
+- **Don't:** Clone, manipulate styles, or over-complicate
+- **Use:** html-to-image `toPng()` with proper image handling
+
+### Problem-Solving Checklist
+When facing a complex problem:
+1. What is the actual root cause? (Not symptoms)
+2. What is the simplest solution that could work?
+3. Have I tried the simple solution first?
+4. Am I using the right tool for this problem?
+5. Would a different approach work better?
+6. Am I overcomplicating this?
+7. If solution requires 3+ layers, reconsider
+
+## Code Style
+
+### Prefer
+- Simple, direct solutions
+- Clear, readable code
+- Standard patterns over clever hacks
+- Native APIs over custom solutions
+
+### Avoid
+- Over-engineering
+- Premature optimization
+- Complex workarounds
+- Fighting against tool limitations
+
+## Specific Lessons
+
+1. **CORS → Server-side proxy** (not client-side workarounds)
+2. **Images → Convert to base64 first** (not during capture)
+3. **Capture → Direct capture** (not clones/manipulation)
+4. **Simple usually works** (if root cause is fixed)
+5. **Step back after 2-3 failures** (reconsider approach)
+
+## Reference
+See `CODING_LIMITATIONS.md` for detailed examples and anti-patterns.

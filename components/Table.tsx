@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import { ClosedPosition } from '@/types';
+import ShareButton from './ShareButton';
 
 // Helper to build Polymarket URL
 function getPolymarketUrl(position: ClosedPosition, type: 'event' | 'market'): string {
@@ -88,12 +90,12 @@ export default function Table({
               >
                 Opened <SortIndicator column="openedAt" />
               </th>
-              <th
-                className="px-3 py-2 text-left text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
-                onClick={() => onSort('closedAt')}
-              >
-                Closed <SortIndicator column="closedAt" />
-              </th>
+                  <th
+                    className="px-3 py-2 text-left text-xs font-medium text-hyper-textSecondary uppercase tracking-wider cursor-pointer hover:bg-hyper-border transition-colors select-none"
+                    onClick={() => onSort('closedAt')}
+                  >
+                    Closed <SortIndicator column="closedAt" />
+                  </th>
               {showNumberColumns && (
                 <>
                   <th
@@ -134,6 +136,9 @@ export default function Table({
                   </th>
                 </>
               )}
+              <th className="px-3 py-2 text-center text-xs font-medium text-hyper-textSecondary uppercase tracking-wider w-16">
+                Share
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-hyper-border">
@@ -218,6 +223,12 @@ export default function Table({
                     </td>
                   </>
                 )}
+                <td 
+                  className="px-3 py-2 text-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ShareButton position={pos} />
+                </td>
               </tr>
             ))}
           </tbody>

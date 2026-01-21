@@ -11,6 +11,7 @@ interface ShareCardProps {
   position: ClosedPosition;
   showDollarPnL?: boolean;
   debug?: boolean;
+  id?: string;
 }
 
 function formatNumber(num: number, decimals: number = 2): string {
@@ -26,7 +27,7 @@ function formatNumber(num: number, decimals: number = 2): string {
   }
 }
 
-export default function ShareCard({ position, showDollarPnL = false, debug = false }: ShareCardProps) {
+export default function ShareCard({ position, showDollarPnL = false, debug = false, id }: ShareCardProps) {
   const marketIconUrl = position.icon;
   const marketName = (position.marketTitle || 'Market').trim();
   const firstLetter = (marketName[0] || 'M').toUpperCase();
@@ -38,304 +39,383 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
 
   return (
     <div
-      className="bg-[#0B0F14] text-[#E6EDF6] relative"
+      id={id}
       style={{
         fontFamily: 'system-ui, -apple-system, sans-serif',
         width: `${SHARE_W}px`,
         height: `${SHARE_H}px`,
+        backgroundColor: '#0B0F14',
+        color: '#E6EDF6',
         boxSizing: 'border-box',
-        display: 'grid',
-        gridTemplateColumns: '350px 1fr',
-        columnGap: '24px',
-        alignItems: 'center',
-        alignContent: 'start',
-        paddingTop: `${SAFE_PAD + (SHARE_H * 0.15)}px`,
-        paddingRight: `${SAFE_PAD}px`,
-        paddingBottom: `${SAFE_PAD}px`,
-        paddingLeft: `${SAFE_PAD}px`,
+        position: 'relative',
         overflow: 'hidden',
         border: debug ? '1px solid red' : 'none',
       }}
     >
-      {/* LEFT COLUMN: Market Icon - Same approach as Table component */}
-      <div className="flex items-center justify-center" style={{ width: '100%', flexShrink: 0 }}>
-        <div
-          style={{
-            width: '250px',
-            height: '250px',
-            borderRadius: '16px',
-            backgroundColor: '#1D2A3A',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'hidden',
-            flexShrink: 0,
-            position: 'relative',
-          }}
-        >
-          {/* Fallback - always rendered, shows if no icon or image fails */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '350px 1fr',
+          columnGap: '24px',
+          alignItems: 'center',
+          alignContent: 'start',
+          paddingTop: `${SAFE_PAD + (SHARE_H * 0.15)}px`,
+          paddingRight: `${SAFE_PAD}px`,
+          paddingBottom: `${SAFE_PAD}px`,
+          paddingLeft: `${SAFE_PAD}px`,
+          height: '100%',
+          boxSizing: 'border-box',
+        }}
+      >
+        {/* LEFT COLUMN: Market Icon */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          width: '100%',
+          flexShrink: 0,
+        }}>
           <div
             style={{
-              position: 'absolute',
-              inset: 0,
-              background: '#121A24',
+              width: '250px',
+              height: '250px',
+              borderRadius: '16px',
+              backgroundColor: '#1D2A3A',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '120px',
-              fontWeight: 'bold',
-              color: '#E6EDF6',
+              overflow: 'hidden',
+              flexShrink: 0,
+              position: 'relative',
             }}
           >
-            {firstLetter}
-          </div>
-          
-          {/* Image - same simple approach as Table component */}
-          {marketIconUrl && (
-            <img 
-              src={marketIconUrl} 
-              alt="" 
+            {/* Fallback */}
+            <div
               style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                display: 'block',
-                position: 'relative',
-                zIndex: 1,
+                position: 'absolute',
+                inset: '0',
+                background: '#121A24',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '120px',
+                fontWeight: 'bold',
+                color: '#E6EDF6',
               }}
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          )}
-        </div>
-      </div>
-
-      {/* RIGHT COLUMN: Text Content (right-aligned) */}
-      <div 
-        className="flex flex-col"
-        style={{
-          height: '100%',
-          alignItems: 'flex-end',
-          justifyContent: 'flex-start',
-          textAlign: 'right',
-          minWidth: 0,
-          width: '100%',
-          overflow: 'hidden',
-          maxWidth: '100%',
-          gap: '10px',
-        }}
-      >
-        {/* 1) SIDE YES/NO */}
-        <div style={{ width: '100%', minWidth: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '4px', flexWrap: 'nowrap' }}>
-            <span 
-              className="text-[#8B949E]"
-              style={{ fontSize: '12px', whiteSpace: 'nowrap', flexShrink: 0 }}
             >
-              SIDE
-            </span>
-            <span 
-              className={`px-2 py-0.5 rounded font-semibold ${
-                position.side === 'Long YES' 
-                  ? 'bg-[#00D26A]/20 text-[#00D26A]' 
-                  : 'bg-[#FF4444]/20 text-[#FF4444]'
-              }`}
-              style={{ fontSize: '13px', whiteSpace: 'nowrap', flexShrink: 0 }}
-            >
-              {position.side === 'Long YES' ? 'YES' : 'NO'}
-            </span>
+              {firstLetter}
+            </div>
+            
+            {/* Image - using proxy to avoid CORS */}
+            {marketIconUrl && (
+              <img 
+                src={`/api/image-proxy?url=${encodeURIComponent(marketIconUrl)}`}
+                alt=""
+                crossOrigin="anonymous"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  display: 'block',
+                  position: 'relative',
+                  zIndex: 1,
+                }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
+              />
+            )}
           </div>
         </div>
 
-        {/* 2) Market name (clamp to 2-3 lines based on length, right-aligned, dynamic font size) */}
-        <div
+        {/* RIGHT COLUMN: Text Content */}
+        <div 
           style={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            alignItems: 'flex-end',
+            justifyContent: 'flex-start',
+            textAlign: 'right',
+            minWidth: '0',
             width: '100%',
-            minWidth: 0,
+            overflow: 'visible',
             maxWidth: '100%',
-            paddingTop: '1px',
+            gap: '10px',
           }}
         >
+          {/* 1) SIDE YES/NO */}
+          <div style={{ width: '100%', minWidth: '0' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'flex-end', 
+              alignItems: 'center', 
+              gap: '4px',
+              flexWrap: 'nowrap',
+            }}>
+              <span 
+                style={{ 
+                  fontSize: '12px',
+                  color: '#8B949E',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                }}
+              >
+                SIDE
+              </span>
+              <span 
+                style={{
+                  padding: '2px 8px',
+                  borderRadius: '4px',
+                  fontWeight: '600',
+                  fontSize: '13px',
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0,
+                  backgroundColor: position.side === 'Long YES' ? 'rgba(0, 210, 106, 0.2)' : 'rgba(255, 68, 68, 0.2)',
+                  color: position.side === 'Long YES' ? '#00D26A' : '#FF4444',
+                }}
+              >
+                {position.side === 'Long YES' ? 'YES' : 'NO'}
+              </span>
+            </div>
+          </div>
+
+          {/* 2) Market name */}
           <div
-            className="font-semibold text-[#E6EDF6]"
             style={{
-              fontSize: marketNameFontSize,
-              display: '-webkit-box',
-              WebkitLineClamp: marketNameLineClamp,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-              overflowWrap: 'anywhere',
-              wordBreak: 'break-word',
+              width: '100%',
+              minWidth: '0',
+              maxWidth: '100%',
+              paddingTop: '1px',
+            }}
+          >
+            <div
+              style={{
+                fontSize: marketNameFontSize,
+                fontWeight: '600',
+                color: '#E6EDF6',
+                display: '-webkit-box',
+                WebkitLineClamp: marketNameLineClamp,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
+                textAlign: 'right',
+                width: '100%',
+                minWidth: '0',
+                maxWidth: '100%',
+                lineHeight: '1.25',
+              }}
+            >
+              {marketName}
+            </div>
+          </div>
+
+          {/* 3) BIG PnL % */}
+          <div 
+            style={{ 
+              fontSize: '76px',
+              fontWeight: 'bold',
+              color: position.realizedPnLPercent >= 0 ? '#00D26A' : '#FF4444',
               textAlign: 'right',
               width: '100%',
-              minWidth: 0,
+              minWidth: '0',
               maxWidth: '100%',
-              lineHeight: '1.25',
-            }}
-          >
-            {marketName}
-          </div>
-        </div>
-
-        {/* 3) BIG PnL % (hero, right-aligned) */}
-        <div 
-          className={`font-bold ${
-            position.realizedPnLPercent >= 0 ? 'text-[#00D26A]' : 'text-[#FF4444]'
-          }`}
-          style={{ 
-            fontSize: 'clamp(52px, 7vw, 76px)',
-            textAlign: 'right',
-            width: '100%',
-            minWidth: 0,
-            maxWidth: '100%',
-            lineHeight: '0.95',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {position.realizedPnLPercent >= 0 ? '+' : ''}{position.realizedPnLPercent.toFixed(1)}%
-        </div>
-
-        {/* 4) Under hero row: PnL $ (if enabled) + Bet size (only if P&L is toggled) */}
-        {showDollarPnL && (
-          <div 
-            className="flex items-center gap-4"
-            style={{
-              whiteSpace: 'nowrap',
-              justifyContent: 'flex-end',
-              width: '100%',
-              minWidth: 0,
-              maxWidth: '100%',
-              flexWrap: 'nowrap',
+              lineHeight: '0.95',
               overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
             }}
           >
-            <div 
-              className={`font-semibold ${
-                position.realizedPnL >= 0 ? 'text-[#00D26A]' : 'text-[#FF4444]'
-              }`}
-              style={{ fontSize: '21px', flexShrink: 1, minWidth: 0 }}
-            >
-              ${formatNumber(position.realizedPnL)}
-            </div>
-            <div 
-              className="font-semibold text-[#E6EDF6]"
-              style={{ fontSize: '21px', flexShrink: 1, minWidth: 0 }}
-            >
-              Bet size: {formatNumber(position.size, 1)}
-            </div>
+            {position.realizedPnLPercent >= 0 ? '+' : ''}{position.realizedPnLPercent.toFixed(1)}%
           </div>
-        )}
 
-        {/* 5) Details block (2 mini columns, right-aligned) - adjusted gap for better text fit */}
-        <div
-          className="grid"
-          style={{
-            gridTemplateColumns: '1fr 1fr',
-            gap: '10px',
-            width: '100%',
-            minWidth: 0,
-          }}
-        >
-          {/* Left mini column */}
-          <div className="flex flex-col gap-1" style={{ alignItems: 'flex-end', minWidth: 0 }}>
-            <div style={{ width: '100%', minWidth: 0 }}>
+          {/* 4) PnL $ + Bet size */}
+          {showDollarPnL && (
+            <div 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                whiteSpace: 'nowrap',
+                justifyContent: 'flex-end',
+                width: '100%',
+                minWidth: '0',
+                maxWidth: '100%',
+                flexWrap: 'nowrap',
+                overflow: 'hidden',
+              }}
+            >
               <div 
-                className="text-[#8B949E] mb-0.5"
-                style={{ fontSize: '12px', textAlign: 'right' }}
-              >
-                Entry
-              </div>
-              <div 
-                className="font-semibold text-[#E6EDF6]"
-                style={{ 
-                  fontSize: '14px', 
-                  textAlign: 'right',
-                  whiteSpace: 'nowrap',
+                style={{
+                  fontSize: '21px',
+                  fontWeight: '600',
+                  color: position.realizedPnL >= 0 ? '#00D26A' : '#FF4444',
+                  flexShrink: 1,
+                  minWidth: '0',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
               >
-                {position.entryVWAP.toFixed(3)}
-              </div>
-            </div>
-            {position.openedAt && (
-              <div style={{ width: '100%', minWidth: 0 }}>
-                <div 
-                  className="text-[#8B949E] mb-0.5"
-                  style={{ fontSize: '12px', textAlign: 'right' }}
-                >
-                  Date Opened
-                </div>
-                <div 
-                  className="font-semibold text-[#E6EDF6]"
-                  style={{ 
-                    fontSize: '13px', 
-                    textAlign: 'right',
-                    overflowWrap: 'anywhere',
-                    wordBreak: 'break-word',
-                    lineHeight: '1.3',
-                  }}
-                >
-                  {new Date(position.openedAt).toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    day: 'numeric', 
-                    year: 'numeric' 
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right mini column */}
-          <div className="flex flex-col gap-1" style={{ alignItems: 'flex-end', minWidth: 0 }}>
-            <div style={{ width: '100%', minWidth: 0 }}>
-              <div 
-                className="text-[#8B949E] mb-0.5"
-                style={{ fontSize: '12px', textAlign: 'right' }}
-              >
-                Exit
+                ${formatNumber(position.realizedPnL)}
               </div>
               <div 
-                className="font-semibold text-[#E6EDF6]"
-                style={{ 
-                  fontSize: '14px', 
-                  textAlign: 'right',
-                  whiteSpace: 'nowrap',
+                style={{
+                  fontSize: '21px',
+                  fontWeight: '600',
+                  color: '#E6EDF6',
+                  flexShrink: 1,
+                  minWidth: '0',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
               >
-                {position.exitVWAP.toFixed(3)}
+                Bet size: {formatNumber(position.size, 1)}
               </div>
             </div>
-            {position.closedAt && (
-              <div style={{ width: '100%', minWidth: 0 }}>
+          )}
+
+          {/* 5) Details block */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '10px',
+              width: '100%',
+              minWidth: '0',
+            }}
+          >
+            {/* Left mini column */}
+            <div style={{ 
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+              alignItems: 'flex-end',
+              minWidth: '0',
+            }}>
+              <div style={{ width: '100%', minWidth: '0' }}>
                 <div 
-                  className="text-[#8B949E] mb-0.5"
-                  style={{ fontSize: '12px', textAlign: 'right' }}
-                >
-                  Date Closed
-                </div>
-                <div 
-                  className="font-semibold text-[#E6EDF6]"
-                  style={{ 
-                    fontSize: '13px', 
+                  style={{
+                    fontSize: '12px',
+                    color: '#8B949E',
                     textAlign: 'right',
-                    overflowWrap: 'anywhere',
-                    wordBreak: 'break-word',
-                    lineHeight: '1.3',
+                    marginBottom: '2px',
                   }}
                 >
-                  {new Date(position.closedAt).toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    day: 'numeric', 
-                    year: 'numeric' 
-                  })}
+                  Entry
+                </div>
+                <div 
+                  style={{ 
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#E6EDF6',
+                    textAlign: 'right',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {position.entryVWAP.toFixed(3)}
                 </div>
               </div>
-            )}
+              {position.openedAt && (
+                <div style={{ width: '100%', minWidth: '0' }}>
+                  <div 
+                    style={{
+                      fontSize: '12px',
+                      color: '#8B949E',
+                      textAlign: 'right',
+                      marginBottom: '2px',
+                    }}
+                  >
+                    Date Opened
+                  </div>
+                  <div 
+                    style={{ 
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      color: '#E6EDF6',
+                      textAlign: 'right',
+                      overflowWrap: 'anywhere',
+                      wordBreak: 'break-word',
+                      lineHeight: '1.3',
+                    }}
+                  >
+                    {new Date(position.openedAt).toLocaleDateString('en-US', { 
+                      month: 'short', 
+                      day: 'numeric', 
+                      year: 'numeric' 
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Right mini column */}
+            <div style={{ 
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+              alignItems: 'flex-end',
+              minWidth: '0',
+            }}>
+              <div style={{ width: '100%', minWidth: '0' }}>
+                <div 
+                  style={{
+                    fontSize: '12px',
+                    color: '#8B949E',
+                    textAlign: 'right',
+                    marginBottom: '2px',
+                  }}
+                >
+                  Exit
+                </div>
+                <div 
+                  style={{ 
+                    fontSize: '14px',
+                    fontWeight: '600',
+                    color: '#E6EDF6',
+                    textAlign: 'right',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {position.exitVWAP.toFixed(3)}
+                </div>
+              </div>
+              {position.closedAt && (
+                <div style={{ width: '100%', minWidth: '0' }}>
+                  <div 
+                    style={{
+                      fontSize: '12px',
+                      color: '#8B949E',
+                      textAlign: 'right',
+                      marginBottom: '2px',
+                    }}
+                  >
+                    Date Closed
+                  </div>
+                  <div 
+                    style={{ 
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      color: '#E6EDF6',
+                      textAlign: 'right',
+                      overflowWrap: 'anywhere',
+                      wordBreak: 'break-word',
+                      lineHeight: '1.3',
+                    }}
+                  >
+                    {new Date(position.closedAt).toLocaleDateString('en-US', { 
+                      month: 'short', 
+                      day: 'numeric', 
+                      year: 'numeric' 
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
