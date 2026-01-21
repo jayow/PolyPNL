@@ -45,13 +45,29 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
         width: `${SHARE_W}px`,
         height: `${SHARE_H}px`,
         backgroundColor: '#0B0F14',
+        backgroundImage: 'url(/bg.png)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
         color: '#E6EDF6',
         boxSizing: 'border-box',
         position: 'relative',
         overflow: 'hidden',
-        border: debug ? '1px solid red' : 'none',
       }}
     >
+      {/* Semi-transparent overlay for better text readability */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(11, 15, 20, 0.5)',
+          zIndex: 1,
+        }}
+      />
+
       <div
         style={{
           display: 'grid',
@@ -65,15 +81,19 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
           paddingLeft: `${SAFE_PAD}px`,
           height: '100%',
           boxSizing: 'border-box',
+          position: 'relative',
+          zIndex: 2,
         }}
       >
-        {/* LEFT COLUMN: Market Icon */}
+        {/* LEFT COLUMN: Market Icon + Branding */}
         <div style={{ 
           display: 'flex', 
+          flexDirection: 'column',
           alignItems: 'center', 
           justifyContent: 'center',
           width: '100%',
           flexShrink: 0,
+          gap: '16px',
         }}>
           <div
             style={{
@@ -126,6 +146,24 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
               />
             )}
           </div>
+          
+          {/* Branding below icon */}
+          <div
+            style={{
+              fontSize: '11px',
+              color: '#E6EDF6',
+              fontWeight: '600',
+              whiteSpace: 'nowrap',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px',
+              alignItems: 'center',
+              textAlign: 'center',
+            }}
+          >
+            <div>POLYPNL made by jayowtrades</div>
+            <div>polypnl.hanyon.app</div>
+          </div>
         </div>
 
         {/* RIGHT COLUMN: Text Content */}
@@ -144,35 +182,24 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
             gap: '10px',
           }}
         >
-          {/* 1) SIDE YES/NO */}
+          {/* 1) YES/NO */}
           <div style={{ width: '100%', minWidth: '0' }}>
             <div style={{ 
               display: 'flex', 
               justifyContent: 'flex-end', 
               alignItems: 'center', 
-              gap: '4px',
               flexWrap: 'nowrap',
             }}>
               <span 
-                style={{ 
-                  fontSize: '12px',
-                  color: '#8B949E',
-                  whiteSpace: 'nowrap',
-                  flexShrink: 0,
-                }}
-              >
-                SIDE
-              </span>
-              <span 
                 style={{
-                  padding: '2px 8px',
+                  padding: '4px 16px',
                   borderRadius: '4px',
                   fontWeight: '600',
-                  fontSize: '13px',
+                  fontSize: '26px',
                   whiteSpace: 'nowrap',
                   flexShrink: 0,
-                  backgroundColor: position.side === 'Long YES' ? 'rgba(0, 210, 106, 0.2)' : 'rgba(255, 68, 68, 0.2)',
-                  color: position.side === 'Long YES' ? '#00D26A' : '#FF4444',
+                  backgroundColor: position.side === 'Long YES' ? 'rgba(0, 210, 106, 1.0)' : 'rgba(255, 68, 68, 1.0)',
+                  color: '#FFFFFF',
                 }}
               >
                 {position.side === 'Long YES' ? 'YES' : 'NO'}

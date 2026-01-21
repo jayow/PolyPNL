@@ -15,9 +15,11 @@ export default function ShareButton({ position }: ShareButtonProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [showDollarPnL, setShowDollarPnL] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   const handleShare = () => {
     setShowModal(true);
+    setCopySuccess(false);
     // Show ShareCard immediately (like hover - instant render)
     // Generate image in background
     setIsGenerating(false);
@@ -179,13 +181,78 @@ export default function ShareButton({ position }: ShareButtonProps) {
     if (!imageUrl) return;
     
     try {
-      const response = await fetch(imageUrl);
-      const blob = await response.blob();
-      const item = new ClipboardItem({ 'image/jpeg': blob });
-      await navigator.clipboard.write([item]);
-      // You could show a toast notification here
+      // ClipboardItem API doesn't support image/jpeg, so convert to PNG
+      const img = new Image();
+      img.crossOrigin = 'anonymous'; // Allow CORS if needed
+      img.src = imageUrl;
+      
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => {
+          // Convert to PNG using canvas
+          const canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth || img.width;
+          canvas.height = img.naturalHeight || img.height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            reject(new Error('Failed to get canvas context'));
+            return;
+          }
+          
+          // Draw the image onto canvas
+          ctx.drawImage(img, 0, 0);
+          
+          // Convert canvas to PNG blob
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              reject(new Error('Failed to convert image to blob'));
+              return;
+            }
+            
+            // Check if ClipboardItem is supported
+            if (!window.ClipboardItem) {
+              reject(new Error('ClipboardItem API is not supported in this browser'));
+              return;
+            }
+            
+            // Use PNG for clipboard (widely supported, unlike JPEG)
+            const clipboardItem = new ClipboardItem({ 
+              'image/png': blob 
+            });
+            
+            navigator.clipboard.write([clipboardItem])
+              .then(() => {
+                console.log('Image copied to clipboard successfully');
+                setCopySuccess(true);
+                setTimeout(() => setCopySuccess(false), 2000);
+                resolve();
+              })
+              .catch((writeErr) => {
+                console.error('Clipboard write error:', writeErr);
+                reject(writeErr);
+              });
+          }, 'image/png');
+        };
+        img.onerror = (error) => {
+          console.error('Image load error:', error);
+          reject(new Error('Failed to load image for clipboard'));
+        };
+      });
     } catch (err) {
       console.error('Failed to copy image:', err);
+      
+      // Handle specific errors
+      if (err instanceof Error) {
+        if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+          alert('Clipboard access denied. Please allow clipboard permissions in your browser settings.');
+        } else if (err.message.includes('image/jpeg')) {
+          // This shouldn't happen with our new code, but handle it anyway
+          alert('Clipboard does not support JPEG. Please try refreshing the page and try again.');
+        } else {
+          alert(`Failed to copy image: ${err.message}. Please try downloading instead.`);
+        }
+      } else {
+        alert('Failed to copy image. Please try downloading instead.');
+      }
     }
   };
 
@@ -302,9 +369,9 @@ export default function ShareButton({ position }: ShareButtonProps) {
                 <button
                   onClick={handleCopyImage}
                   disabled={!imageUrl || isGenerating}
-                  className="px-4 py-2 bg-hyper-panelHover hover:bg-hyper-border border border-hyper-border rounded text-sm font-medium text-hyper-textPrimary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-hyper-panelHover hover:bg-hyper-border border border-hyper-border rounded text-sm font-medium text-hyper-textPrimary transition-colors disabled:opacity-50 disabled:cursor-not-allowed relative"
                 >
-                  Copy Image
+                  {copySuccess ? 'Image copied!' : 'Copy Image'}
                 </button>
                 <button
                   onClick={handleDownload}
