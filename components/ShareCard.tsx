@@ -12,6 +12,7 @@ interface ShareCardProps {
   showDollarPnL?: boolean;
   debug?: boolean;
   id?: string;
+  customBackground?: string | null;
 }
 
 function formatNumber(num: number, decimals: number = 2): string {
@@ -27,7 +28,7 @@ function formatNumber(num: number, decimals: number = 2): string {
   }
 }
 
-export default function ShareCard({ position, showDollarPnL = false, debug = false, id }: ShareCardProps) {
+export default function ShareCard({ position, showDollarPnL = false, debug = false, id, customBackground = null }: ShareCardProps) {
   const marketIconUrl = position.icon;
   const marketName = (position.marketTitle || 'Market').trim();
   const firstLetter = (marketName[0] || 'M').toUpperCase();
@@ -45,7 +46,7 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
         width: `${SHARE_W}px`,
         height: `${SHARE_H}px`,
         backgroundColor: '#0B0F14',
-        backgroundImage: 'url(/bg.png)',
+        backgroundImage: customBackground ? `url(${customBackground})` : 'url(/bg.png)',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',

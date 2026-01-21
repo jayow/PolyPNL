@@ -16,16 +16,122 @@ export default function ShareButton({ position }: ShareButtonProps) {
   const [showDollarPnL, setShowDollarPnL] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copySuccess, setCopySuccess] = useState(false);
+  const [customBackground, setCustomBackground] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const handleShare = () => {
     setShowModal(true);
     setCopySuccess(false);
+    setUploadError(null);
     // Show ShareCard immediately (like hover - instant render)
     // Generate image in background
     setIsGenerating(false);
     setImageUrl(null);
+    // Reset custom background when opening new share (optional - remove if you want to persist)
+    // setCustomBackground(null);
     // Start image generation async, but don't block UI
     generateImage();
+  };
+
+  const handleBackgroundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check if it's an image
+    if (!file.type.startsWith('image/')) {
+      setUploadError('Please upload an image file');
+      return;
+    }
+
+    // Load and fit image to 16:9 ratio
+    const img = new Image();
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      img.src = dataUrl;
+
+      img.onload = () => {
+        const width = img.naturalWidth;
+        const height = img.naturalHeight;
+        const sourceRatio = width / height;
+        const targetRatio = 16 / 9;
+
+        // Calculate target dimensions (use ShareCard dimensions for consistency)
+        const targetWidth = SHARE_W;
+        const targetHeight = SHARE_H;
+
+        // Create canvas to crop/scale image to 16:9
+        const canvas = document.createElement('canvas');
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext('2d');
+
+        if (!ctx) {
+          setUploadError('Failed to process image. Please try again.');
+          return;
+        }
+
+        let sourceX = 0;
+        let sourceY = 0;
+        let sourceWidth = width;
+        let sourceHeight = height;
+
+        // Crop to fit 16:9 ratio (center crop)
+        if (sourceRatio > targetRatio) {
+          // Image is wider than 16:9 - crop width
+          sourceWidth = height * targetRatio;
+          sourceX = (width - sourceWidth) / 2;
+        } else {
+          // Image is taller than 16:9 - crop height
+          sourceHeight = width / targetRatio;
+          sourceY = (height - sourceHeight) / 2;
+        }
+
+        // Draw the cropped/scaled image
+        ctx.drawImage(
+          img,
+          sourceX, sourceY, sourceWidth, sourceHeight,
+          0, 0, targetWidth, targetHeight
+        );
+
+        // Convert to data URL
+        const fittedDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+        
+        // Set as background
+        setCustomBackground(fittedDataUrl);
+        setUploadError(null);
+        
+        // Regenerate image with new background
+        if (showModal && !isGenerating) {
+          setIsGenerating(true);
+          setImageUrl(null);
+          generateImage();
+        }
+      };
+
+      img.onerror = () => {
+        setUploadError('Failed to load image. Please try another file.');
+      };
+    };
+
+    reader.onerror = () => {
+      setUploadError('Failed to read file. Please try again.');
+    };
+
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveBackground = () => {
+    setCustomBackground(null);
+    setUploadError(null);
+    
+    // Regenerate image with default background
+    if (showModal && !isGenerating) {
+      setIsGenerating(true);
+      setImageUrl(null);
+      generateImage();
+    }
   };
 
   const generateImage = async () => {
@@ -323,6 +429,7 @@ export default function ShareButton({ position }: ShareButtonProps) {
                 position={position} 
                 showDollarPnL={showDollarPnL}
                 debug={process.env.NODE_ENV === 'development'}
+                customBackground={customBackground}
               />
               
               {/* Show ShareCard immediately - numbers appear instantly like hover */}
@@ -350,6 +457,40 @@ export default function ShareButton({ position }: ShareButtonProps) {
                   {error}
                 </div>
               )}
+            </div>
+
+            {/* Background Upload Section */}
+            <div className="px-4 py-3 border-t border-hyper-border">
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm text-hyper-textSecondary">Custom Background</label>
+                {customBackground && (
+                  <button
+                    onClick={handleRemoveBackground}
+                    className="text-xs text-hyper-textSecondary hover:text-hyper-textPrimary transition-colors"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-col gap-2">
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleBackgroundUpload}
+                    className="hidden"
+                  />
+                  <span className="text-xs px-3 py-2 bg-hyper-panelHover hover:bg-hyper-border border border-hyper-border rounded text-hyper-textPrimary transition-colors inline-block">
+                    {customBackground ? 'Change Background' : 'Upload Background'}
+                  </span>
+                </label>
+                <p className="text-xs text-hyper-textSecondary">
+                  Image will be automatically fitted to 16:9 ratio
+                </p>
+                {uploadError && (
+                  <p className="text-xs text-red-400">{uploadError}</p>
+                )}
+              </div>
             </div>
 
             {/* Toggle and Actions */}
