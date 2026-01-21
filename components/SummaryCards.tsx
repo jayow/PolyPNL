@@ -11,9 +11,9 @@ function formatNumber(num: number, decimals: number = 2): string {
   const sign = num < 0 ? '-' : '';
   
   if (absNum >= 1000000) {
-    return `${sign}${(absNum / 1000000).toFixed(decimals)}m`;
+    return `${sign}${(absNum / 1000000).toFixed(decimals)}M`;
   } else if (absNum >= 1000) {
-    return `${sign}${(absNum / 1000).toFixed(decimals)}k`;
+    return `${sign}${(absNum / 1000).toFixed(decimals)}K`;
   } else {
     return `${sign}${absNum.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
   }
@@ -79,7 +79,7 @@ export function SummaryCardsLayout({ summary, variant = 'all' }: SummaryCardsLay
         variant="hero"
         label="Total PnL"
         value={
-          <div className={`text-xl font-mono-numeric font-semibold ${
+          <div className={`text-xl  font-semibold ${
             summary.totalRealizedPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
           }`}>
             ${formatNumber(summary.totalRealizedPnL)}
@@ -91,7 +91,7 @@ export function SummaryCardsLayout({ summary, variant = 'all' }: SummaryCardsLay
         variant="hero"
         label="Win Rate"
         value={
-          <div className="text-xl font-mono-numeric font-semibold text-hyper-accent">
+          <div className="text-xl  font-semibold text-hyper-accent">
             {summary.winrate.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
           </div>
         }
@@ -101,7 +101,7 @@ export function SummaryCardsLayout({ summary, variant = 'all' }: SummaryCardsLay
         variant="hero"
         label="Positions"
         value={
-          <div className="text-xl font-mono-numeric font-semibold text-hyper-textPrimary">
+          <div className="text-xl  font-semibold text-hyper-textPrimary">
             {summary.totalPositionsClosed.toLocaleString('en-US')}
           </div>
         }
@@ -115,7 +115,7 @@ export function SummaryCardsLayout({ summary, variant = 'all' }: SummaryCardsLay
       <StatCard
         label="Avg PnL"
         value={
-          <div className={`text-sm font-mono-numeric font-medium ${
+          <div className={`text-sm  font-medium ${
             summary.avgPnLPerPosition >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
           }`}>
             ${formatNumber(summary.avgPnLPerPosition)}
@@ -125,7 +125,7 @@ export function SummaryCardsLayout({ summary, variant = 'all' }: SummaryCardsLay
       <StatCard
         label="Avg Pos Size"
         value={
-          <div className="text-sm font-mono-numeric font-medium text-hyper-textPrimary">
+          <div className="text-sm  font-medium text-hyper-textPrimary">
             {formatNumber(summary.avgPosSize, 1)}
           </div>
         }
@@ -133,7 +133,7 @@ export function SummaryCardsLayout({ summary, variant = 'all' }: SummaryCardsLay
       <StatCard
         label="Avg Holding"
         value={
-          <div className="text-sm font-mono-numeric font-medium text-hyper-textPrimary">
+          <div className="text-sm  font-medium text-hyper-textPrimary">
             {summary.avgHoldingTime > 0 ? formatDays(summary.avgHoldingTime) : '-'}
           </div>
         }
@@ -149,7 +149,7 @@ export function SummaryCardsLayout({ summary, variant = 'all' }: SummaryCardsLay
       <StatCard
         label="Biggest Win"
         value={
-          <div className="text-sm font-mono-numeric font-medium text-hyper-accent">
+          <div className="text-sm  font-medium text-hyper-accent">
             ${formatNumber(summary.biggestWin)}
           </div>
         }
@@ -157,7 +157,7 @@ export function SummaryCardsLayout({ summary, variant = 'all' }: SummaryCardsLay
       <StatCard
         label="Biggest Loss"
         value={
-          <div className="text-sm font-mono-numeric font-medium text-hyper-negative">
+          <div className="text-sm  font-medium text-hyper-negative">
             ${formatNumber(summary.biggestLoss)}
           </div>
         }

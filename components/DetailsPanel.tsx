@@ -39,9 +39,9 @@ function formatNumber(num: number, decimals: number = 2): string {
   const sign = num < 0 ? '-' : '';
   
   if (absNum >= 1000000) {
-    return `${sign}${(absNum / 1000000).toFixed(decimals)}m`;
+    return `${sign}${(absNum / 1000000).toFixed(decimals)}M`;
   } else if (absNum >= 1000) {
-    return `${sign}${(absNum / 1000).toFixed(decimals)}k`;
+    return `${sign}${(absNum / 1000).toFixed(decimals)}K`;
   } else {
     return `${sign}${absNum.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
   }
@@ -166,13 +166,13 @@ export default function DetailsPanel({ selectedPosition, resolveResult }: Detail
         <div className="grid grid-cols-2 gap-2">
           <div>
             <div className="text-xs text-hyper-textSecondary mb-1.5">Opened</div>
-            <div className="text-sm font-mono-numeric text-hyper-textPrimary">
+            <div className="text-sm  text-hyper-textPrimary">
               {new Date(selectedPosition.openedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
             </div>
           </div>
           <div>
             <div className="text-xs text-hyper-textSecondary mb-1.5">Closed</div>
-            <div className="text-sm font-mono-numeric text-hyper-textPrimary">
+            <div className="text-sm  text-hyper-textPrimary">
               {selectedPosition.closedAt ? new Date(selectedPosition.closedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}
             </div>
           </div>
@@ -181,19 +181,19 @@ export default function DetailsPanel({ selectedPosition, resolveResult }: Detail
         <div className="border-t border-hyper-border pt-2 space-y-2">
           <div className="flex justify-between items-center">
             <span className="text-xs text-hyper-textSecondary">Entry VWAP</span>
-            <span className="text-sm font-mono-numeric text-hyper-textPrimary">{selectedPosition.entryVWAP.toFixed(4)}</span>
+            <span className="text-sm  text-hyper-textPrimary">{selectedPosition.entryVWAP.toFixed(4)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-xs text-hyper-textSecondary">Exit VWAP</span>
-            <span className="text-sm font-mono-numeric text-hyper-textPrimary">{selectedPosition.exitVWAP.toFixed(4)}</span>
+            <span className="text-sm  text-hyper-textPrimary">{selectedPosition.exitVWAP.toFixed(4)}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-xs text-hyper-textSecondary">Size</span>
-            <span className="text-sm font-mono-numeric text-hyper-textPrimary">{selectedPosition.size.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <span className="text-sm  text-hyper-textPrimary">{selectedPosition.size.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-xs text-hyper-textSecondary">Realized PnL</span>
-            <span className={`text-sm font-mono-numeric font-medium ${
+            <span className={`text-sm  font-medium ${
               selectedPosition.realizedPnL >= 0 ? 'text-hyper-positive' : 'text-hyper-negative'
             }`}>
               ${formatNumber(selectedPosition.realizedPnL)}
@@ -201,7 +201,7 @@ export default function DetailsPanel({ selectedPosition, resolveResult }: Detail
           </div>
           <div className="flex justify-between items-center">
             <span className="text-xs text-hyper-textSecondary">PnL %</span>
-            <span className={`text-sm font-mono-numeric font-medium ${
+            <span className={`text-sm  font-medium ${
               selectedPosition.realizedPnLPercent >= 0 ? 'text-hyper-positive' : 'text-hyper-negative'
             }`}>
               {selectedPosition.realizedPnLPercent >= 0 ? '+' : ''}{selectedPosition.realizedPnLPercent.toFixed(2)}%
@@ -209,7 +209,7 @@ export default function DetailsPanel({ selectedPosition, resolveResult }: Detail
           </div>
           <div className="flex justify-between items-center">
             <span className="text-xs text-hyper-textSecondary">Trades</span>
-            <span className="text-sm font-mono-numeric text-hyper-textPrimary">{selectedPosition.tradesCount.toLocaleString('en-US')}</span>
+            <span className="text-sm  text-hyper-textPrimary">{selectedPosition.tradesCount.toLocaleString('en-US')}</span>
           </div>
         </div>
 
@@ -316,7 +316,7 @@ export default function DetailsPanel({ selectedPosition, resolveResult }: Detail
                         {activity.price !== undefined && (
                           <div className="min-w-0">
                             <div className="text-[9px] text-hyper-textSecondary mb-1">Price</div>
-                            <div className="font-mono-numeric text-[10px] truncate" title={activity.price.toFixed(4)}>
+                            <div className=" text-[10px] truncate" title={activity.price.toFixed(4)}>
                               {activity.price.toFixed(4)}
                             </div>
                           </div>
@@ -324,7 +324,7 @@ export default function DetailsPanel({ selectedPosition, resolveResult }: Detail
                         {activity.size !== undefined && (
                           <div className="min-w-0">
                             <div className="text-[9px] text-hyper-textSecondary mb-1">Size</div>
-                            <div className="font-mono-numeric text-[10px] truncate" title={activity.size.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}>
+                            <div className=" text-[10px] truncate" title={activity.size.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}>
                               {activity.size.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                           </div>
@@ -332,7 +332,7 @@ export default function DetailsPanel({ selectedPosition, resolveResult }: Detail
                         {displayValue !== null && (
                           <div className="min-w-0">
                             <div className="text-[9px] text-hyper-textSecondary mb-1">Value</div>
-                            <div className="font-mono-numeric text-[10px] truncate" title={`$${displayValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}>
+                            <div className=" text-[10px] truncate" title={`$${displayValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}>
                               ${displayValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </div>
                           </div>
@@ -341,12 +341,12 @@ export default function DetailsPanel({ selectedPosition, resolveResult }: Detail
                     ) : (
                       <div className="text-hyper-textPrimary">
                         {displayValue !== null && (
-                          <div className="font-mono-numeric text-[10px]">
+                          <div className=" text-[10px]">
                             ${displayValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
                         )}
                         {activity.size !== undefined && activity.usdcSize === undefined && (
-                          <div className="font-mono-numeric text-[10px]">
+                          <div className=" text-[10px]">
                             {activity.size.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </div>
                         )}

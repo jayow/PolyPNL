@@ -32,9 +32,9 @@ function formatNumber(num: number, decimals: number = 2): string {
   const sign = num < 0 ? '-' : '';
   
   if (absNum >= 1000000) {
-    return `${sign}${(absNum / 1000000).toFixed(decimals)}m`;
+    return `${sign}${(absNum / 1000000).toFixed(decimals)}M`;
   } else if (absNum >= 1000) {
-    return `${sign}${(absNum / 1000).toFixed(decimals)}k`;
+    return `${sign}${(absNum / 1000).toFixed(decimals)}K`;
   } else {
     return `${sign}${absNum.toFixed(decimals)}`;
   }
@@ -212,7 +212,7 @@ export default function AdvancedAnalytics({ positions }: AdvancedAnalyticsProps)
               <div className="text-sm font-medium text-hyper-textPrimary mb-1">
                 {sortedTagStats[0].tag}
               </div>
-              <div className={`text-base font-mono-numeric font-medium ${
+              <div className={`text-base  font-medium ${
                 sortedTagStats[0].totalPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
               }`}>
                 ${formatNumber(sortedTagStats[0].totalPnL)}
@@ -228,7 +228,7 @@ export default function AdvancedAnalytics({ positions }: AdvancedAnalyticsProps)
                 <div className="text-sm font-medium text-hyper-textPrimary mb-1">
                   {sortedTagStats[sortedTagStats.length - 1].tag}
                 </div>
-                <div className={`text-base font-mono-numeric font-medium ${
+                <div className={`text-base  font-medium ${
                   sortedTagStats[sortedTagStats.length - 1].totalPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
                 }`}>
                   ${formatNumber(sortedTagStats[sortedTagStats.length - 1].totalPnL)}
@@ -330,7 +330,7 @@ export default function AdvancedAnalytics({ positions }: AdvancedAnalyticsProps)
               {sortedTagStats.map((stat) => (
                 <tr key={stat.tag} className="hover:bg-hyper-panelHover">
                   <td className="px-3 py-2 text-hyper-textPrimary">{stat.tag}</td>
-                  <td className={`px-3 py-2 text-right font-mono-numeric ${
+                  <td className={`px-3 py-2 text-right  ${
                     stat.totalPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
                   }`}>
                     ${formatNumber(stat.totalPnL)}
@@ -341,22 +341,22 @@ export default function AdvancedAnalytics({ positions }: AdvancedAnalyticsProps)
                   <td className="px-3 py-2 text-right text-hyper-textSecondary">
                     {stat.winRate.toFixed(1)}%
                   </td>
-                  <td className={`px-3 py-2 text-right font-mono-numeric ${
+                  <td className={`px-3 py-2 text-right  ${
                     stat.avgPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
                   }`}>
                     ${formatNumber(stat.avgPnL)}
                   </td>
-                  <td className={`px-3 py-2 text-right font-mono-numeric ${
+                  <td className={`px-3 py-2 text-right  ${
                     stat.biggestWin > 0 ? 'text-hyper-accent' : 'text-hyper-textSecondary'
                   }`}>
                     {stat.biggestWin > 0 ? `$${formatNumber(stat.biggestWin)}` : '-'}
                   </td>
-                  <td className={`px-3 py-2 text-right font-mono-numeric ${
+                  <td className={`px-3 py-2 text-right  ${
                     stat.biggestLoss < 0 ? 'text-hyper-negative' : 'text-hyper-textSecondary'
                   }`}>
                     {stat.biggestLoss < 0 ? `$${formatNumber(stat.biggestLoss)}` : '-'}
                   </td>
-                  <td className={`px-3 py-2 text-right font-mono-numeric ${
+                  <td className={`px-3 py-2 text-right  ${
                     stat.yesPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
                   }`}>
                     ${formatNumber(stat.yesPnL)}
@@ -367,7 +367,7 @@ export default function AdvancedAnalytics({ positions }: AdvancedAnalyticsProps)
                   <td className="px-3 py-2 text-right text-hyper-textSecondary">
                     {stat.yesCount}
                   </td>
-                  <td className={`px-3 py-2 text-right font-mono-numeric ${
+                  <td className={`px-3 py-2 text-right  ${
                     stat.noPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
                   }`}>
                     ${formatNumber(stat.noPnL)}

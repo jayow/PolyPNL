@@ -14,9 +14,9 @@ function formatNumber(num: number, decimals: number = 2): string {
   const sign = num < 0 ? '-' : '';
   
   if (absNum >= 1000000) {
-    return `${sign}${(absNum / 1000000).toFixed(decimals)}m`;
+    return `${sign}${(absNum / 1000000).toFixed(decimals)}M`;
   } else if (absNum >= 1000) {
-    return `${sign}${(absNum / 1000).toFixed(decimals)}k`;
+    return `${sign}${(absNum / 1000).toFixed(decimals)}K`;
   } else {
     return `${sign}${absNum.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
   }
@@ -66,7 +66,7 @@ export default function TopStatsRowV2({ summary, positions }: TopStatsRowV2Props
       {/* Card 1: Total PnL (Hero) */}
       <div className="bg-hyper-panel border border-hyper-border rounded py-3 px-3">
         <div className="text-[9px] text-hyper-textSecondary mb-1 uppercase tracking-wide">Total PnL</div>
-        <div className={`text-2xl font-mono-numeric font-semibold mb-0.5 ${
+        <div className={`text-2xl  font-semibold mb-0.5 ${
           summary.totalRealizedPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
         }`}>
           ${formatNumber(summary.totalRealizedPnL)}
@@ -77,7 +77,7 @@ export default function TopStatsRowV2({ summary, positions }: TopStatsRowV2Props
         <div className="flex gap-x-1 gap-y-1.5 pt-2 border-t border-hyper-border">
           <div className="flex-shrink-0">
             <div className="text-[9px] text-hyper-textSecondary">Avg PnL</div>
-            <div className={`text-xs font-mono-numeric font-semibold ${
+            <div className={`text-xs  font-semibold ${
               summary.avgPnLPerPosition >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(summary.avgPnLPerPosition)}
@@ -85,25 +85,25 @@ export default function TopStatsRowV2({ summary, positions }: TopStatsRowV2Props
           </div>
           <div className="flex-shrink-0 ml-2">
             <div className="text-[9px] text-hyper-textSecondary">Avg Size</div>
-            <div className="text-xs font-mono-numeric font-semibold text-hyper-textPrimary">
+            <div className="text-xs  font-semibold text-hyper-textPrimary">
               {formatNumber(summary.avgPosSize, 1)}
             </div>
           </div>
           <div className="flex-shrink-0 ml-1">
             <div className="text-[9px] text-hyper-textSecondary">Avg Holding</div>
-            <div className="text-xs font-mono-numeric font-semibold text-hyper-textPrimary whitespace-nowrap">
+            <div className="text-xs  font-semibold text-hyper-textPrimary whitespace-nowrap">
               {summary.avgHoldingTime > 0 ? formatDays(summary.avgHoldingTime) : '-'}
             </div>
           </div>
           <div className="flex-shrink-0 ml-3">
             <div className="text-[9px] text-hyper-textSecondary">Big Win</div>
-            <div className="text-xs font-mono-numeric font-semibold text-hyper-accent">
+            <div className="text-xs  font-semibold text-hyper-accent">
               ${formatNumber(summary.biggestWin)}
             </div>
           </div>
           <div className="flex-shrink-0 ml-3">
             <div className="text-[9px] text-hyper-textSecondary">Big Loss</div>
-            <div className="text-xs font-mono-numeric font-semibold text-hyper-negative">
+            <div className="text-xs  font-semibold text-hyper-negative">
               ${formatNumber(summary.biggestLoss)}
             </div>
           </div>
@@ -113,7 +113,7 @@ export default function TopStatsRowV2({ summary, positions }: TopStatsRowV2Props
       {/* Card 2: Win Rate (Summary) */}
       <div className="bg-hyper-panel border border-hyper-border rounded py-3 px-3">
         <div className="text-[9px] text-hyper-textSecondary mb-1 uppercase tracking-wide">Win Rate</div>
-        <div className="text-xl font-mono-numeric font-semibold text-hyper-accent mb-0.5">
+        <div className="text-xl  font-semibold text-hyper-accent mb-0.5">
           {summary.winrate.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
         </div>
         <div className="text-[9px] text-hyper-textSecondary mb-2">Win Rate</div>
@@ -122,7 +122,7 @@ export default function TopStatsRowV2({ summary, positions }: TopStatsRowV2Props
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-2 border-t border-hyper-border">
           <div>
             <div className="text-[9px] text-hyper-textSecondary">Positions</div>
-            <div className="text-xs font-mono-numeric font-semibold text-hyper-textPrimary">
+            <div className="text-xs  font-semibold text-hyper-textPrimary">
               {summary.totalPositionsClosed.toLocaleString('en-US')}
             </div>
           </div>
@@ -154,7 +154,7 @@ export default function TopStatsRowV2({ summary, positions }: TopStatsRowV2Props
         <div className="text-[9px] text-hyper-textSecondary mb-1 uppercase tracking-wide">Long YES</div>
         
         {/* Highlighted PnL */}
-        <div className={`text-xl font-mono-numeric font-semibold mb-0.5 ${
+        <div className={`text-xl  font-semibold mb-0.5 ${
           yesPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
         }`}>
           ${formatNumber(yesPnL)}
@@ -165,13 +165,13 @@ export default function TopStatsRowV2({ summary, positions }: TopStatsRowV2Props
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-2 border-t border-hyper-border">
           <div>
             <div className="text-[9px] text-hyper-textSecondary">WR</div>
-            <div className="text-xs font-mono-numeric font-semibold text-hyper-textPrimary">
+            <div className="text-xs  font-semibold text-hyper-textPrimary">
               {yesWinRate.toFixed(1)}%
             </div>
           </div>
           <div>
             <div className="text-[9px] text-hyper-textSecondary">Avg</div>
-            <div className={`text-xs font-mono-numeric font-semibold ${
+            <div className={`text-xs  font-semibold ${
               yesAvgPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(yesAvgPnL)}
@@ -179,7 +179,7 @@ export default function TopStatsRowV2({ summary, positions }: TopStatsRowV2Props
           </div>
           <div>
             <div className="text-[9px] text-hyper-textSecondary">Cnt</div>
-            <div className="text-xs font-mono-numeric font-semibold text-hyper-textPrimary">
+            <div className="text-xs  font-semibold text-hyper-textPrimary">
               {yesCount.toLocaleString('en-US')}
             </div>
           </div>
@@ -191,7 +191,7 @@ export default function TopStatsRowV2({ summary, positions }: TopStatsRowV2Props
         <div className="text-[9px] text-hyper-textSecondary mb-1 uppercase tracking-wide">Long NO</div>
         
         {/* Highlighted PnL */}
-        <div className={`text-xl font-mono-numeric font-semibold mb-0.5 ${
+        <div className={`text-xl  font-semibold mb-0.5 ${
           noPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
         }`}>
           ${formatNumber(noPnL)}
@@ -202,13 +202,13 @@ export default function TopStatsRowV2({ summary, positions }: TopStatsRowV2Props
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-2 border-t border-hyper-border">
           <div>
             <div className="text-[9px] text-hyper-textSecondary">WR</div>
-            <div className="text-xs font-mono-numeric font-semibold text-hyper-textPrimary">
+            <div className="text-xs  font-semibold text-hyper-textPrimary">
               {noWinRate.toFixed(1)}%
             </div>
           </div>
           <div>
             <div className="text-[9px] text-hyper-textSecondary">Avg</div>
-            <div className={`text-xs font-mono-numeric font-semibold ${
+            <div className={`text-xs  font-semibold ${
               noAvgPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(noAvgPnL)}
@@ -216,7 +216,7 @@ export default function TopStatsRowV2({ summary, positions }: TopStatsRowV2Props
           </div>
           <div>
             <div className="text-[9px] text-hyper-textSecondary">Cnt</div>
-            <div className="text-xs font-mono-numeric font-semibold text-hyper-textPrimary">
+            <div className="text-xs  font-semibold text-hyper-textPrimary">
               {noCount.toLocaleString('en-US')}
             </div>
           </div>
@@ -226,7 +226,7 @@ export default function TopStatsRowV2({ summary, positions }: TopStatsRowV2Props
       {/* Card 5: Share Stats */}
       <div className="bg-hyper-panel border border-hyper-border rounded py-3 px-3">
         <div className="text-[9px] text-hyper-textSecondary mb-1 uppercase tracking-wide">Share Stats</div>
-        <div className="text-xs font-mono-numeric font-semibold text-hyper-textPrimary">
+        <div className="text-xs  font-semibold text-hyper-textPrimary">
           -
         </div>
       </div>

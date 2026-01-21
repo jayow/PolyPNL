@@ -13,9 +13,9 @@ function formatNumber(num: number, decimals: number = 0): string {
   const sign = num < 0 ? '-' : '';
   
   if (absNum >= 1000000) {
-    return `${sign}${(absNum / 1000000).toFixed(decimals)}m`;
+    return `${sign}${(absNum / 1000000).toFixed(decimals)}M`;
   } else if (absNum >= 1000) {
-    return `${sign}${(absNum / 1000).toFixed(decimals)}k`;
+    return `${sign}${(absNum / 1000).toFixed(decimals)}K`;
   } else {
     return `${sign}${absNum.toFixed(decimals)}`;
   }
@@ -129,14 +129,14 @@ export default function PnLGraph({ positions }: PnLGraphProps) {
           
           {/* Daily PnL */}
           <div className="text-hyper-textPrimary mb-1">
-            PnL: <span className={`font-mono-numeric ${data.pnl >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'}`}>
+            PnL: <span className={` ${data.pnl >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'}`}>
               ${formatNumber(data.pnl)}
             </span>
           </div>
           
           {/* Cumulative PnL */}
           <div className="text-hyper-textPrimary mb-3">
-            Cumulative: <span className={`font-mono-numeric ${data.cumulativePnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'}`}>
+            Cumulative: <span className={` ${data.cumulativePnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'}`}>
               ${formatNumber(data.cumulativePnL)}
             </span>
           </div>
@@ -151,7 +151,7 @@ export default function PnLGraph({ positions }: PnLGraphProps) {
                     <div className="text-hyper-textPrimary truncate flex-1" title={pos.marketTitle || pos.eventTitle || 'Unknown'}>
                       {pos.marketTitle || pos.eventTitle || 'Unknown'}
                     </div>
-                    <div className="font-mono-numeric text-hyper-accent whitespace-nowrap">
+                    <div className=" text-hyper-accent whitespace-nowrap">
                       ${formatNumber(pos.realizedPnL)}
                     </div>
                   </div>
@@ -170,7 +170,7 @@ export default function PnLGraph({ positions }: PnLGraphProps) {
                     <div className="text-hyper-textPrimary truncate flex-1" title={pos.marketTitle || pos.eventTitle || 'Unknown'}>
                       {pos.marketTitle || pos.eventTitle || 'Unknown'}
                     </div>
-                    <div className="font-mono-numeric text-hyper-negative whitespace-nowrap">
+                    <div className=" text-hyper-negative whitespace-nowrap">
                       ${formatNumber(pos.realizedPnL)}
                     </div>
                   </div>

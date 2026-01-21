@@ -34,9 +34,9 @@ function formatNumber(num: number, decimals: number = 2): string {
   const sign = num < 0 ? '-' : '';
   
   if (absNum >= 1000000) {
-    return `${sign}${(absNum / 1000000).toFixed(decimals)}m`;
+    return `${sign}${(absNum / 1000000).toFixed(decimals)}M`;
   } else if (absNum >= 1000) {
-    return `${sign}${(absNum / 1000).toFixed(decimals)}k`;
+    return `${sign}${(absNum / 1000).toFixed(decimals)}K`;
   } else {
     return `${sign}${absNum.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
   }
@@ -199,26 +199,26 @@ export default function Table({
                 </td>
                 {showNumberColumns && (
                   <>
-                    <td className="px-3 py-2 text-right font-mono-numeric text-hyper-textPrimary">
+                    <td className="px-3 py-2 text-right text-hyper-textPrimary">
                       {pos.entryVWAP.toFixed(3)}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono-numeric text-hyper-textPrimary">
+                    <td className="px-3 py-2 text-right text-hyper-textPrimary">
                       {pos.exitVWAP.toFixed(3)}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono-numeric text-hyper-textPrimary">
-                      {formatNumberWithCommas(pos.size, 1)}
+                    <td className="px-3 py-2 text-right text-hyper-textPrimary">
+                      ${formatNumberWithCommas(pos.size, 1)}
                     </td>
-                    <td className={`px-3 py-2 text-right font-mono-numeric font-medium ${
+                    <td className={`px-3 py-2 text-right font-medium ${
                       pos.realizedPnL >= 0 ? 'text-hyper-positive' : 'text-hyper-negative'
                     }`}>
                       ${formatNumber(pos.realizedPnL)}
                     </td>
-                    <td className={`px-3 py-2 text-right font-mono-numeric font-medium ${
+                    <td className={`px-3 py-2 text-right font-medium ${
                       pos.realizedPnLPercent >= 0 ? 'text-hyper-positive' : 'text-hyper-negative'
                     }`}>
                       {pos.realizedPnLPercent >= 0 ? '+' : ''}{pos.realizedPnLPercent.toFixed(1)}%
                     </td>
-                    <td className="px-3 py-2 text-right font-mono-numeric text-hyper-textPrimary">
+                    <td className="px-3 py-2 text-right text-hyper-textPrimary">
                       {pos.tradesCount.toLocaleString('en-US')}
                     </td>
                   </>

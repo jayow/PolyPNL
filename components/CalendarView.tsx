@@ -27,9 +27,9 @@ function formatNumber(num: number, decimals: number = 2): string {
   const sign = num < 0 ? '-' : '';
   
   if (absNum >= 1000000) {
-    return `${sign}${(absNum / 1000000).toFixed(decimals)}m`;
+    return `${sign}${(absNum / 1000000).toFixed(decimals)}M`;
   } else if (absNum >= 1000) {
-    return `${sign}${(absNum / 1000).toFixed(decimals)}k`;
+    return `${sign}${(absNum / 1000).toFixed(decimals)}K`;
   } else {
     return `${sign}${absNum.toFixed(decimals)}`;
   }
@@ -224,7 +224,7 @@ export default function CalendarView({ positions }: CalendarViewProps) {
             </button>
           </div>
           <div className="flex items-center gap-2">
-            <span className={`text-sm font-mono-numeric ${
+            <span className={`text-sm  ${
               totalPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(totalPnL)}
@@ -286,7 +286,7 @@ export default function CalendarView({ positions }: CalendarViewProps) {
                 <div className={`text-sm ${textColor} font-medium leading-tight`}>
                   {dayData.day}
                 </div>
-                <div className={`text-xs ${pnlColor} font-mono-numeric leading-tight truncate`}>
+                <div className={`text-xs ${pnlColor}  leading-tight truncate`}>
                   {hasData ? (
                     `$${formatNumber(dayData.pnl!)}`
                   ) : isCurrentMonth ? (
@@ -302,7 +302,7 @@ export default function CalendarView({ positions }: CalendarViewProps) {
                     </div>
                     
                     <div className="text-hyper-textPrimary mb-1">
-                      PnL: <span className={`font-mono-numeric ${dayData.pnl! >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'}`}>
+                      PnL: <span className={` ${dayData.pnl! >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'}`}>
                         ${formatNumber(dayData.pnl!)}
                       </span>
                     </div>
@@ -316,7 +316,7 @@ export default function CalendarView({ positions }: CalendarViewProps) {
                               <div className="text-hyper-textPrimary truncate flex-1" title={pos.marketTitle || pos.eventTitle || 'Unknown'}>
                                 {pos.marketTitle || pos.eventTitle || 'Unknown'}
                               </div>
-                              <div className="font-mono-numeric text-hyper-accent whitespace-nowrap">
+                              <div className=" text-hyper-accent whitespace-nowrap">
                                 ${formatNumber(pos.realizedPnL)}
                               </div>
                             </div>
@@ -334,7 +334,7 @@ export default function CalendarView({ positions }: CalendarViewProps) {
                               <div className="text-hyper-textPrimary truncate flex-1" title={pos.marketTitle || pos.eventTitle || 'Unknown'}>
                                 {pos.marketTitle || pos.eventTitle || 'Unknown'}
                               </div>
-                              <div className="font-mono-numeric text-hyper-negative whitespace-nowrap">
+                              <div className=" text-hyper-negative whitespace-nowrap">
                                 ${formatNumber(pos.realizedPnL)}
                               </div>
                             </div>
@@ -392,7 +392,7 @@ export default function CalendarView({ positions }: CalendarViewProps) {
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-base font-medium text-hyper-textPrimary">{year}</h3>
                 <div className="text-sm text-hyper-textSecondary">
-                  Total: <span className={`font-mono-numeric ${
+                  Total: <span className={` ${
                     months.reduce((sum, m) => sum + (m.monthData?.pnl ?? 0), 0) >= 0 
                       ? 'text-hyper-accent' 
                       : 'text-hyper-negative'
@@ -438,7 +438,7 @@ export default function CalendarView({ positions }: CalendarViewProps) {
                     <div key={monthKey} className="border border-hyper-border rounded p-2.5">
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-sm font-medium text-hyper-textPrimary">{monthDisplay}</h4>
-                        <span className={`text-sm font-mono-numeric ${
+                        <span className={`text-sm  ${
                           totalPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
                         }`}>
                           ${formatNumber(totalPnL)}
@@ -489,7 +489,7 @@ export default function CalendarView({ positions }: CalendarViewProps) {
                                     {new Date(dayData.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                                   </div>
                                   <div className="text-hyper-textPrimary mb-1">
-                                    PnL: <span className={`font-mono-numeric ${dayData.pnl! >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'}`}>
+                                    PnL: <span className={` ${dayData.pnl! >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'}`}>
                                       ${formatNumber(dayData.pnl!)}
                                     </span>
                                   </div>

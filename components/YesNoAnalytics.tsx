@@ -12,9 +12,9 @@ function formatNumber(num: number, decimals: number = 2): string {
   const sign = num < 0 ? '-' : '';
   
   if (absNum >= 1000000) {
-    return `${sign}${(absNum / 1000000).toFixed(decimals)}m`;
+    return `${sign}${(absNum / 1000000).toFixed(decimals)}M`;
   } else if (absNum >= 1000) {
-    return `${sign}${(absNum / 1000).toFixed(decimals)}k`;
+    return `${sign}${(absNum / 1000).toFixed(decimals)}K`;
   } else {
     return `${sign}${absNum.toFixed(decimals)}`;
   }
@@ -61,7 +61,7 @@ export default function YesNoAnalytics({ positions }: YesNoAnalyticsProps) {
         <div className="space-y-0.5">
           <div className="flex justify-between items-center">
             <span className="text-[9px] text-hyper-textSecondary">PnL</span>
-            <span className={`text-xs font-mono-numeric font-medium ${
+            <span className={`text-xs  font-medium ${
               analytics.yes.pnl >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(analytics.yes.pnl)}
@@ -69,13 +69,13 @@ export default function YesNoAnalytics({ positions }: YesNoAnalyticsProps) {
           </div>
           <div className="flex justify-between items-center">
             <span className="text-[9px] text-hyper-textSecondary">WR</span>
-            <span className="text-xs font-mono-numeric font-medium text-hyper-textPrimary">
+            <span className="text-xs  font-medium text-hyper-textPrimary">
               {analytics.yes.winRate.toFixed(1)}%
             </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-[9px] text-hyper-textSecondary">Avg</span>
-            <span className={`text-xs font-mono-numeric font-medium ${
+            <span className={`text-xs  font-medium ${
               analytics.yes.avgPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(analytics.yes.avgPnL)}
@@ -83,7 +83,7 @@ export default function YesNoAnalytics({ positions }: YesNoAnalyticsProps) {
           </div>
           <div className="flex justify-between items-center">
             <span className="text-[9px] text-hyper-textSecondary">Cnt</span>
-            <span className="text-xs font-mono-numeric font-medium text-hyper-textPrimary">
+            <span className="text-xs  font-medium text-hyper-textPrimary">
               {analytics.yes.count.toLocaleString('en-US')}
             </span>
           </div>
@@ -96,7 +96,7 @@ export default function YesNoAnalytics({ positions }: YesNoAnalyticsProps) {
         <div className="space-y-0.5">
           <div className="flex justify-between items-center">
             <span className="text-[9px] text-hyper-textSecondary">PnL</span>
-            <span className={`text-xs font-mono-numeric font-medium ${
+            <span className={`text-xs  font-medium ${
               analytics.no.pnl >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(analytics.no.pnl)}
@@ -104,13 +104,13 @@ export default function YesNoAnalytics({ positions }: YesNoAnalyticsProps) {
           </div>
           <div className="flex justify-between items-center">
             <span className="text-[9px] text-hyper-textSecondary">WR</span>
-            <span className="text-xs font-mono-numeric font-medium text-hyper-textPrimary">
+            <span className="text-xs  font-medium text-hyper-textPrimary">
               {analytics.no.winRate.toFixed(1)}%
             </span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-[9px] text-hyper-textSecondary">Avg</span>
-            <span className={`text-xs font-mono-numeric font-medium ${
+            <span className={`text-xs  font-medium ${
               analytics.no.avgPnL >= 0 ? 'text-hyper-accent' : 'text-hyper-negative'
             }`}>
               ${formatNumber(analytics.no.avgPnL)}
@@ -118,7 +118,7 @@ export default function YesNoAnalytics({ positions }: YesNoAnalyticsProps) {
           </div>
           <div className="flex justify-between items-center">
             <span className="text-[9px] text-hyper-textSecondary">Cnt</span>
-            <span className="text-xs font-mono-numeric font-medium text-hyper-textPrimary">
+            <span className="text-xs  font-medium text-hyper-textPrimary">
               {analytics.no.count.toLocaleString('en-US')}
             </span>
           </div>

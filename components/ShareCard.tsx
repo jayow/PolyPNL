@@ -20,9 +20,9 @@ function formatNumber(num: number, decimals: number = 2): string {
   const sign = num < 0 ? '-' : '';
   
   if (absNum >= 1000000) {
-    return `${sign}${(absNum / 1000000).toFixed(decimals)}m`;
+    return `${sign}${(absNum / 1000000).toFixed(decimals)}M`;
   } else if (absNum >= 1000) {
-    return `${sign}${(absNum / 1000).toFixed(decimals)}k`;
+    return `${sign}${(absNum / 1000).toFixed(decimals)}K`;
   } else {
     return `${sign}${absNum.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
   }
@@ -298,7 +298,7 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
                   textOverflow: 'ellipsis',
                 }}
               >
-                Bet size: {formatNumber(position.size, 1)}
+                Bet size: ${formatNumber(position.size, 1)}
               </div>
             </div>
           )}
