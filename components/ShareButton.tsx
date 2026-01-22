@@ -1,15 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { ClosedPosition } from '@/types';
+import { ClosedPosition, ProxyWalletResponse } from '@/types';
 import ShareCard, { SHARE_W, SHARE_H } from './ShareCard';
 import { toPng } from 'html-to-image';
 
 interface ShareButtonProps {
   position: ClosedPosition;
+  wallet: string;
+  resolveResult: ProxyWalletResponse | null;
 }
 
-export default function ShareButton({ position }: ShareButtonProps) {
+export default function ShareButton({ position, wallet, resolveResult }: ShareButtonProps) {
   const [showModal, setShowModal] = useState(false);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -441,6 +443,9 @@ export default function ShareButton({ position }: ShareButtonProps) {
                 showDollarPnL={showDollarPnL}
                 debug={process.env.NODE_ENV === 'development'}
                 customBackground={customBackground}
+                wallet={wallet}
+                username={resolveResult?.username}
+                profileImage={resolveResult?.profileImage}
               />
               
               {isGenerating && (

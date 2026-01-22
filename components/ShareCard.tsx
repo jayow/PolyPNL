@@ -13,6 +13,9 @@ interface ShareCardProps {
   debug?: boolean;
   id?: string;
   customBackground?: string | null;
+  wallet?: string;
+  username?: string | null;
+  profileImage?: string | null;
 }
 
 function formatNumber(num: number, decimals: number = 2): string {
@@ -28,7 +31,7 @@ function formatNumber(num: number, decimals: number = 2): string {
   }
 }
 
-export default function ShareCard({ position, showDollarPnL = false, debug = false, id, customBackground = null }: ShareCardProps) {
+export default function ShareCard({ position, showDollarPnL = false, debug = false, id, customBackground = null, wallet = '', username = null, profileImage = null }: ShareCardProps) {
   const marketIconUrl = position.icon;
   const marketName = (position.marketTitle || 'Market').trim();
   const firstLetter = (marketName[0] || 'M').toUpperCase();
@@ -68,6 +71,49 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
           zIndex: 1,
         }}
       />
+
+      {/* Username or Wallet Address with Avatar - Top Left */}
+      {(username || wallet) && (
+        <div
+          style={{
+            position: 'absolute',
+            top: `${SAFE_PAD*1.5}px`,
+            left: `${SAFE_PAD*2.1}px`,
+            zIndex: 10,
+            backgroundColor: 'rgba(29, 42, 58, 0.8)',
+            padding: '8px 16px',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontSize: '20px',
+            color: '#E6EDF6',
+            fontWeight: '500',
+            fontFamily: username ? 'system-ui, -apple-system, sans-serif' : 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+          }}
+        >
+          {profileImage && (
+            <img
+              src={profileImage.startsWith('http') ? `/api/image-proxy?url=${encodeURIComponent(profileImage)}` : profileImage}
+              alt={username || 'Profile'}
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '2px solid rgba(230, 237, 246, 0.3)',
+              }}
+              crossOrigin="anonymous"
+            />
+          )}
+          <span>
+            {username || (wallet.length > 10 
+              ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}`
+              : wallet)
+            }
+          </span>
+        </div>
+      )}
 
       <div
         style={{

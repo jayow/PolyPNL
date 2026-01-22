@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ClosedPosition } from '@/types';
+import { ClosedPosition, ProxyWalletResponse } from '@/types';
 import ShareButton from './ShareButton';
 
 // Helper to build Polymarket URL
@@ -27,6 +27,8 @@ interface TableProps {
   onSort: (column: keyof ClosedPosition) => void;
   selectedPosition: ClosedPosition | null;
   onSelectPosition: (position: ClosedPosition | null) => void;
+  wallet: string;
+  resolveResult: ProxyWalletResponse | null;
 }
 
 function formatNumber(num: number, decimals: number = 2): string {
@@ -54,6 +56,8 @@ export default function Table({
   onSort,
   selectedPosition,
   onSelectPosition,
+  wallet,
+  resolveResult,
 }: TableProps) {
   const SortIndicator = ({ column }: { column: keyof ClosedPosition }) => {
     if (sortColumn !== column) return null;
@@ -227,7 +231,7 @@ export default function Table({
                   className="px-3 py-2 text-center"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <ShareButton position={pos} />
+                  <ShareButton position={pos} wallet={wallet} resolveResult={resolveResult} />
                 </td>
               </tr>
             ))}

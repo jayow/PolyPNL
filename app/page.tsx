@@ -316,6 +316,8 @@ export default function Home() {
                         onSort={handleSort}
                         selectedPosition={selectedPosition}
                         onSelectPosition={setSelectedPosition}
+                        wallet={wallet}
+                        resolveResult={resolveResult}
                       />
                     </div>
 

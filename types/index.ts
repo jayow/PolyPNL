@@ -4,11 +4,18 @@ export interface ProxyWalletResponse {
   userAddressUsed: string;
   proxyWalletFound: boolean;
   proxyWallet?: string;
+  username?: string | null;
+  profileImage?: string | null;
 }
 
 export interface PolymarketPublicProfile {
   wallet: string;
   proxyWallet?: string | null;
+  username?: string | null;
+  name?: string | null;
+  displayName?: string | null;
+  profileImage?: string | null;
+  bio?: string | null;
 }
 
 export interface PolymarketTrade {
