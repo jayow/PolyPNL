@@ -77,10 +77,9 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
         <div
           style={{
             position: 'absolute',
-            top: `${SAFE_PAD*1.5}px`,
-            left: `${SAFE_PAD*2.1}px`,
+            top: `${SAFE_PAD*1.4}px`,
+            left: `${SAFE_PAD*1.6}px`,
             zIndex: 10,
-            backgroundColor: 'rgba(29, 42, 58, 0.8)',
             padding: '8px 16px',
             borderRadius: '8px',
             display: 'flex',
@@ -90,9 +89,10 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
             color: '#E6EDF6',
             fontWeight: '500',
             fontFamily: username ? 'system-ui, -apple-system, sans-serif' : 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+            // backgroundColor removed
           }}
         >
-          {profileImage && (
+          {profileImage ? (
             <img
               src={profileImage.startsWith('http') ? `/api/image-proxy?url=${encodeURIComponent(profileImage)}` : profileImage}
               alt={username || 'Profile'}
@@ -105,6 +105,24 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
               }}
               crossOrigin="anonymous"
             />
+          ) : (
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                backgroundColor: '#2E5CFF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#FFFFFF',
+                fontSize: '14px',
+                fontWeight: '600',
+                flexShrink: 0,
+              }}
+            >
+              {(username || wallet) ? (username || wallet).charAt(0).toUpperCase() : '?'}
+            </div>
           )}
           <span>
             {username || (wallet.length > 10 
@@ -120,7 +138,7 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
           display: 'grid',
           gridTemplateColumns: '350px 350px',
           columnGap: '24px',
-          alignItems: 'center',
+          alignItems: 'start',
           alignContent: 'start',
           paddingTop: `${SAFE_PAD + (SHARE_H * 0.15)}px`,
           paddingRight: `${SAFE_PAD}px`,
@@ -137,11 +155,12 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
           display: 'flex', 
           flexDirection: 'column',
           alignItems: 'center', 
-          justifyContent: 'center',
+          justifyContent: 'flex-start',
           width: '100%',
           flexShrink: 0,
           gap: '20px',
           marginLeft: `-${SAFE_PAD*0.5}px`,
+          paddingTop: '0',
         }}>
           <div
             style={{
@@ -481,7 +500,7 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
       <div
         style={{
           position: 'absolute',
-          bottom: `${SAFE_PAD*1.5}px`,
+          bottom: `${SAFE_PAD*2}px`,
           left: `${SAFE_PAD * 2.1}px`,
           zIndex: 10,
           display: 'flex',

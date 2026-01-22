@@ -295,6 +295,10 @@ export async function fetchPolymarketUsername(address: string): Promise<{
  * Fetch profile image for a user by username or wallet address
  * This handles the full flow: username -> wallet address -> profile image
  */
+/**
+ * Fetch profile image for a user by username or wallet address
+ * This handles the full flow: username -> wallet address -> profile image
+ */
 export async function fetchProfileImageByUsername(usernameOrAddress: string): Promise<string | null> {
   try {
     let walletAddress = usernameOrAddress.toLowerCase().trim();
@@ -312,11 +316,6 @@ export async function fetchProfileImageByUsername(usernameOrAddress: string): Pr
         },
       }, 15000);
       
-      if (!pageResponse.ok) {
-        console.error(`[fetchProfileImage] Profile page returned ${pageResponse.status}`);
-        return null;
-      }
-      
       const html = await pageResponse.text();
       
       // Extract wallet address from Next.js data
@@ -326,26 +325,28 @@ export async function fetchProfileImageByUsername(usernameOrAddress: string): Pr
           const nextData = JSON.parse(nextDataMatch[1]);
           const pageProps = nextData?.props?.pageProps;
           
-          // Try various locations for the wallet address
-          const possibleAddresses = [
-            pageProps?.address,
-            pageProps?.wallet,
-            pageProps?.user?.address,
-            pageProps?.user?.wallet,
-            pageProps?.profile?.address,
-            pageProps?.profile?.wallet,
-            pageProps?.profile?.proxyWallet,
-            pageProps?.account?.address,
-            pageProps?.data?.address,
-            pageProps?.data?.wallet,
-          ].filter(Boolean);
+          // Debug: log what we find
+          console.log('[fetchProfileImage] pageProps keys:', Object.keys(pageProps || {}));
+          console.log('[fetchProfileImage] pageProps.address:', pageProps?.address);
+          console.log('[fetchProfileImage] pageProps.wallet:', pageProps?.wallet);
           
-          if (possibleAddresses.length > 0) {
-            walletAddress = possibleAddresses[0].toLowerCase();
-            console.log(`[fetchProfileImage] Found wallet address from page: ${walletAddress}`);
+          // Try various locations for the wallet address
+          walletAddress = 
+            pageProps?.address ||
+            pageProps?.wallet ||
+            pageProps?.user?.address ||
+            pageProps?.user?.wallet ||
+            pageProps?.profile?.address ||
+            pageProps?.profile?.wallet ||
+            pageProps?.profile?.proxyWallet ||
+            pageProps?.account?.address ||
+            null;
+          
+          if (walletAddress) {
+            walletAddress = walletAddress.toLowerCase();
+            console.log(`[fetchProfileImage] Found wallet address: ${walletAddress}`);
           } else {
             console.error(`[fetchProfileImage] Could not find wallet address in Next.js data`);
-            console.log(`[fetchProfileImage] Available pageProps keys:`, Object.keys(pageProps || {}));
             return null;
           }
         } catch (parseError) {
@@ -368,19 +369,27 @@ export async function fetchProfileImageByUsername(usernameOrAddress: string): Pr
       },
     }, 10000);
     
+    console.log(`[fetchProfileImage] API response status:`, apiResponse.status);
+    
+    const responseText = await apiResponse.text();
+    console.log(`[fetchProfileImage] Response text:`, responseText);
+    
     if (!apiResponse.ok) {
       console.error(`[fetchProfileImage] API returned ${apiResponse.status}`);
       return null;
     }
     
-    const profileData = await apiResponse.json();
+    const profileData = JSON.parse(responseText);
+    console.log(`[fetchProfileImage] Parsed profile data:`, profileData);
+    console.log(`[fetchProfileImage] profileData.profileImage:`, profileData.profileImage);
+    
     const profileImage = profileData.profileImage || null;
     
     if (profileImage) {
-      console.log(`[fetchProfileImage] Found profile image: ${profileImage}`);
+      console.log(`[fetchProfileImage] ✓ Found profile image: ${profileImage}`);
     } else {
-      console.log(`[fetchProfileImage] No profile image in API response`);
-      console.log(`[fetchProfileImage] API response keys:`, Object.keys(profileData));
+      console.log(`[fetchProfileImage] ✗ No profile image in API response`);
+      console.log(`[fetchProfileImage] Available keys:`, Object.keys(profileData));
     }
     
     return profileImage;
@@ -423,19 +432,42 @@ export async function resolveProxyWallet(wallet: string): Promise<{
       const checkData = await checkResponse.json();
       const positions = Array.isArray(checkData) ? checkData : [];
       
-      if (positions.length > 0) {
-        // Input address has closed positions, it's already a proxy wallet
-        console.log(`[API] Input address already has closed positions, treating as proxy wallet: ${normalizedWallet}`);
-        proxyWalletCache.set(normalizedWallet, null); // Cache that it's already a proxy
-        const profileData = await fetchPolymarketUsername(normalizedWallet);
-        return {
-          inputWallet: wallet,
-          userAddressUsed: normalizedWallet,
-          proxyWalletFound: false, // Not "found" because it was already the proxy
-          username: profileData.username,
-          profileImage: null,
-        };
-      }
+              if (positions.length > 0) {
+                // Input address has closed positions, it's already a proxy wallet
+                console.log(`[API] Input address already has closed positions, treating as proxy wallet: ${normalizedWallet}`);
+                proxyWalletCache.set(normalizedWallet, null); // Cache that it's already a proxy
+                
+                // Still fetch profileImage from API
+                let profileImageFromAPI: string | null = null;
+                try {
+                  const profileApiResponse = await fetchWithTimeout(
+                    `${GAMMA_API_BASE}/public-profile?address=${encodeURIComponent(normalizedWallet)}`,
+                    {
+                      headers: {
+                        'Accept': 'application/json',
+                      },
+                    },
+                    10000
+                  );
+                  
+                  if (profileApiResponse.ok) {
+                    const profileApiData = await profileApiResponse.json();
+                    profileImageFromAPI = profileApiData.profileImage || null;
+                    console.log(`[API] Fetched profileImage from API for early return path:`, profileImageFromAPI);
+                  }
+                } catch (apiError) {
+                  console.log(`[API] Failed to fetch profileImage in early return path:`, apiError);
+                }
+                
+                const profileData = await fetchPolymarketUsername(normalizedWallet);
+                return {
+                  inputWallet: wallet,
+                  userAddressUsed: normalizedWallet,
+                  proxyWalletFound: false, // Not "found" because it was already the proxy
+                  username: profileData.username,
+                  profileImage: profileImageFromAPI,
+                };
+              }
     }
   } catch (checkError) {
     // Continue with normal resolution if check fails
@@ -474,9 +506,11 @@ export async function resolveProxyWallet(wallet: string): Promise<{
         console.log(`[resolveProxyWallet] Response keys:`, Object.keys(responseData));
         console.log(`[resolveProxyWallet] responseData.profileImage:`, responseData.profileImage);
         console.log(`[resolveProxyWallet] Full responseData:`, JSON.stringify(responseData, null, 2));
-        // Directly extract profileImage from API response
-        profileImageFromResponse = responseData.profileImage ?? null;
+        // Directly extract profileImage from API response - the API returns it, so use it
+        profileImageFromResponse = responseData.profileImage || null;
         console.log(`[resolveProxyWallet] Extracted profileImageFromResponse:`, profileImageFromResponse);
+        console.log(`[resolveProxyWallet] Type of profileImageFromResponse:`, typeof profileImageFromResponse);
+        console.log(`[resolveProxyWallet] Is profileImageFromResponse truthy:`, !!profileImageFromResponse);
       } catch (parseError) {
         console.error(`[resolveProxyWallet] Failed to parse JSON:`, parseError);
         responseData = { error: responseText };
@@ -702,22 +736,18 @@ export async function resolveProxyWallet(wallet: string): Promise<{
     
     // Extract profileImage directly from API response - the API clearly returns it
     // The API returns: {"profileImage":"https://...", "name":"jayowtrades", ...}
-    // So data.profileImage should be there
-    const profileImage = data?.profileImage ?? profileImageFromResponse ?? null;
+    // Use data.profileImage directly since we already parsed the response
+    const profileImage = data?.profileImage || profileImageFromResponse || null;
     
-    // CRITICAL: If profileImage is null, log everything to debug
-    if (!profileImage) {
-      console.error(`[resolveProxyWallet] CRITICAL ERROR: profileImage is null!`);
-      console.error(`[resolveProxyWallet] response.ok:`, response.ok);
-      console.error(`[resolveProxyWallet] response.status:`, response.status);
-      console.error(`[resolveProxyWallet] data exists:`, !!data);
-      console.error(`[resolveProxyWallet] data.profileImage:`, data?.profileImage);
-      console.error(`[resolveProxyWallet] profileImageFromResponse:`, profileImageFromResponse);
-      console.error(`[resolveProxyWallet] Full data object:`, JSON.stringify(data, null, 2));
-    }
-    console.log(`[resolveProxyWallet] Success path - data.profileImage:`, data?.profileImage);
-    console.log(`[resolveProxyWallet] Success path - profileImageFromResponse:`, profileImageFromResponse);
-    console.log(`[resolveProxyWallet] Success path - final profileImage:`, profileImage);
+    // CRITICAL DEBUG: The API returns profileImage, so if it's null, something is wrong
+    console.log(`[resolveProxyWallet] Success path DEBUG:`);
+    console.log(`[resolveProxyWallet] - response.ok:`, response.ok);
+    console.log(`[resolveProxyWallet] - response.status:`, response.status);
+    console.log(`[resolveProxyWallet] - data exists:`, !!data);
+    console.log(`[resolveProxyWallet] - data.profileImage:`, data?.profileImage);
+    console.log(`[resolveProxyWallet] - profileImageFromResponse:`, profileImageFromResponse);
+    console.log(`[resolveProxyWallet] - final profileImage:`, profileImage);
+    console.log(`[resolveProxyWallet] - data keys:`, data ? Object.keys(data) : 'data is null');
     const username = data.name || data.pseudonym || null;
     const proxyWallet = data.proxyWallet?.toLowerCase() || null;
     
