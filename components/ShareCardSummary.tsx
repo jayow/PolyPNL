@@ -357,173 +357,186 @@ export default function ShareCardSummary({
       // Signal that canvas is ready
       canvas.setAttribute('data-canvas-ready', 'true');
       
-      // NOW calculate tooltip positions after canvas is drawn
-      let bestPos = getTooltipPosition(bestPosition, true);
-      let worstPos = getTooltipPosition(worstPosition, false);
-      
-      // Apply overlap avoidance logic
-      if (bestPos && worstPos) {
-        const tooltipWidth = 250;
-        const tooltipHeight = 80;
-        const minSpacing = 10; // Minimum spacing between tooltips
-        
-        // Define tooltip rectangles
-        const bestRect = {
-          left: bestPos.x,
-          right: bestPos.x + tooltipWidth,
-          top: bestPos.y,
-          bottom: bestPos.y + tooltipHeight,
-        };
-        
-        const worstRect = {
-          left: worstPos.x,
-          right: worstPos.x + tooltipWidth,
-          top: worstPos.y,
-          bottom: worstPos.y + tooltipHeight,
-        };
-        
-        // Check if tooltips overlap or are too close
-        const overlaps = !(
-          bestRect.right + minSpacing < worstRect.left ||
-          worstRect.right + minSpacing < bestRect.left ||
-          bestRect.bottom + minSpacing < worstRect.top ||
-          worstRect.bottom + minSpacing < bestRect.top
-        );
-        
-        if (overlaps) {
-          // Find the points on the graph for both tooltips
-          const bestIndex = bestPosition ? cumulativeData.findIndex(point => point.position === bestPosition) : -1;
-          const worstIndex = worstPosition ? cumulativeData.findIndex(point => point.position === worstPosition) : -1;
-          
-          if (bestIndex !== -1 && worstIndex !== -1) {
-            const padding = 20;
-            const graphWidth = 600 - padding * 2;
-            const graphHeight = 240 - padding * 2;
-            const minPnL = Math.min(...cumulativeData.map(d => d.cumulativePnL), 0);
-            const maxPnL = Math.max(...cumulativeData.map(d => d.cumulativePnL), 0);
-            const range = maxPnL - minPnL || 1;
-            
-            const bestPointX = padding + (bestIndex / (cumulativeData.length - 1)) * graphWidth;
-            const bestPointY = padding + graphHeight - ((cumulativeData[bestIndex].cumulativePnL - minPnL) / range) * graphHeight;
-            
-            const worstPointX = padding + (worstIndex / (cumulativeData.length - 1)) * graphWidth;
-            const worstPointY = padding + graphHeight - ((cumulativeData[worstIndex].cumulativePnL - minPnL) / range) * graphHeight;
-            
-            // Strategy: Try to separate them vertically first, then horizontally if needed
-            const verticalSeparation = Math.abs(bestPointY - worstPointY);
-            const horizontalSeparation = Math.abs(bestPointX - worstPointX);
-            
-            // If points are close vertically, try to separate tooltips vertically
-            if (verticalSeparation < tooltipHeight + minSpacing) {
-              // Determine which point is higher on the graph
-              const bestIsHigher = bestPointY < worstPointY;
-              
-              if (bestIsHigher) {
-                // Best is higher, try to keep best above and move worst further down
-                const newWorstY = bestRect.bottom + minSpacing;
-                if (newWorstY + tooltipHeight <= 240) {
-                  worstPos = { ...worstPos, y: newWorstY };
-                } else {
-                  // Can't move worst down, try moving best up
-                  const newBestY = worstRect.top - tooltipHeight - minSpacing;
-                  if (newBestY >= 0) {
-                    bestPos = { ...bestPos, y: newBestY };
-                  } else {
-                    // Both can't fit vertically, try horizontal separation
-                    if (bestPointX < worstPointX) {
-                      // Best is on left, worst is on right
-                      bestPos = { ...bestPos, x: Math.max(0, worstRect.left - tooltipWidth - minSpacing) };
-                    } else {
-                      // Worst is on left, best is on right
-                      worstPos = { ...worstPos, x: Math.max(0, bestRect.left - tooltipWidth - minSpacing) };
-                    }
-                  }
-                }
-              } else {
-                // Worst is higher, try to keep worst above and move best further down
-                const newBestY = worstRect.bottom + minSpacing;
-                if (newBestY + tooltipHeight <= 240) {
-                  bestPos = { ...bestPos, y: newBestY };
-                } else {
-                  // Can't move best down, try moving worst up
-                  const newWorstY = bestRect.top - tooltipHeight - minSpacing;
-                  if (newWorstY >= 0) {
-                    worstPos = { ...worstPos, y: newWorstY };
-                  } else {
-                    // Both can't fit vertically, try horizontal separation
-                    if (bestPointX < worstPointX) {
-                      // Best is on left, worst is on right
-                      bestPos = { ...bestPos, x: Math.max(0, worstRect.left - tooltipWidth - minSpacing) };
-                    } else {
-                      // Worst is on left, best is on right
-                      worstPos = { ...worstPos, x: Math.max(0, bestRect.left - tooltipWidth - minSpacing) };
-                    }
-                  }
-                }
-              }
-            }
-            
-            // Re-check overlap after vertical adjustment
-            const bestRectAfter = {
-              left: bestPos.x,
-              right: bestPos.x + tooltipWidth,
-              top: bestPos.y,
-              bottom: bestPos.y + tooltipHeight,
-            };
-            
-            const worstRectAfter = {
-              left: worstPos.x,
-              right: worstPos.x + tooltipWidth,
-              top: worstPos.y,
-              bottom: worstPos.y + tooltipHeight,
-            };
-            
-            const stillOverlaps = !(
-              bestRectAfter.right + minSpacing < worstRectAfter.left ||
-              worstRectAfter.right + minSpacing < bestRectAfter.left ||
-              bestRectAfter.bottom + minSpacing < worstRectAfter.top ||
-              worstRectAfter.bottom + minSpacing < bestRectAfter.top
-            );
-            
-            // If still overlapping, try horizontal separation
-            if (stillOverlaps && horizontalSeparation < tooltipWidth + minSpacing) {
-              if (bestPointX < worstPointX) {
-                // Best is on left, move best further left or worst further right
-                const newBestX = worstRectAfter.left - tooltipWidth - minSpacing;
-                if (newBestX >= 0) {
-                  bestPos = { ...bestPos, x: newBestX };
-                } else {
-                  // Can't move best left, try moving worst right
-                  const newWorstX = bestRectAfter.right + minSpacing;
-                  if (newWorstX + tooltipWidth <= 600) {
-                    worstPos = { ...worstPos, x: newWorstX };
-                  }
-                }
-              } else {
-                // Worst is on left, move worst further left or best further right
-                const newWorstX = bestRectAfter.left - tooltipWidth - minSpacing;
-                if (newWorstX >= 0) {
-                  worstPos = { ...worstPos, x: newWorstX };
-                } else {
-                  // Can't move worst left, try moving best right
-                  const newBestX = worstRectAfter.right + minSpacing;
-                  if (newBestX + tooltipWidth <= 600) {
-                    bestPos = { ...bestPos, x: newBestX };
-                  }
-                }
-              }
-            }
-          }
-        }
+      // CRITICAL: Force browser to complete layout before calculating tooltips
+      // Reading offsetHeight forces a layout calculation
+      const graphContainer = canvas.parentElement;
+      if (graphContainer) {
+        void graphContainer.offsetHeight; // Force layout
+        void graphContainer.getBoundingClientRect(); // Force paint
       }
       
-      // Set tooltip positions in state
-      setBestTooltipPos(bestPos);
-      setWorstTooltipPos(worstPos);
-      
-      // Also dispatch a custom event for additional reliability
-      const event = new CustomEvent('canvasReady', { detail: { canvas } });
-      canvas.dispatchEvent(event);
+      // Small delay to ensure layout is complete
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          // NOW calculate tooltip positions after layout is stable
+            let bestPos = getTooltipPosition(bestPosition, true);
+            let worstPos = getTooltipPosition(worstPosition, false);
+        
+            // Apply overlap avoidance logic
+            if (bestPos && worstPos) {
+              const tooltipWidth = 250;
+              const tooltipHeight = 80;
+              const minSpacing = 10; // Minimum spacing between tooltips
+              
+              // Define tooltip rectangles
+              const bestRect = {
+                left: bestPos.x,
+                right: bestPos.x + tooltipWidth,
+                top: bestPos.y,
+                bottom: bestPos.y + tooltipHeight,
+              };
+              
+              const worstRect = {
+                left: worstPos.x,
+                right: worstPos.x + tooltipWidth,
+                top: worstPos.y,
+                bottom: worstPos.y + tooltipHeight,
+              };
+              
+              // Check if tooltips overlap or are too close
+              const overlaps = !(
+                bestRect.right + minSpacing < worstRect.left ||
+                worstRect.right + minSpacing < bestRect.left ||
+                bestRect.bottom + minSpacing < worstRect.top ||
+                worstRect.bottom + minSpacing < bestRect.top
+              );
+              
+              if (overlaps) {
+                // Find the points on the graph for both tooltips
+                const bestIndex = bestPosition ? cumulativeData.findIndex(point => point.position === bestPosition) : -1;
+                const worstIndex = worstPosition ? cumulativeData.findIndex(point => point.position === worstPosition) : -1;
+                
+                if (bestIndex !== -1 && worstIndex !== -1) {
+                  const padding = 20;
+                  const graphWidth = 600 - padding * 2;
+                  const graphHeight = 240 - padding * 2;
+                  const minPnL = Math.min(...cumulativeData.map(d => d.cumulativePnL), 0);
+                  const maxPnL = Math.max(...cumulativeData.map(d => d.cumulativePnL), 0);
+                  const range = maxPnL - minPnL || 1;
+                  
+                  const bestPointX = padding + (bestIndex / (cumulativeData.length - 1)) * graphWidth;
+                  const bestPointY = padding + graphHeight - ((cumulativeData[bestIndex].cumulativePnL - minPnL) / range) * graphHeight;
+                  
+                  const worstPointX = padding + (worstIndex / (cumulativeData.length - 1)) * graphWidth;
+                  const worstPointY = padding + graphHeight - ((cumulativeData[worstIndex].cumulativePnL - minPnL) / range) * graphHeight;
+                  
+                  // Strategy: Try to separate them vertically first, then horizontally if needed
+                  const verticalSeparation = Math.abs(bestPointY - worstPointY);
+                  const horizontalSeparation = Math.abs(bestPointX - worstPointX);
+                  
+                  // If points are close vertically, try to separate tooltips vertically
+                  if (verticalSeparation < tooltipHeight + minSpacing) {
+                    // Determine which point is higher on the graph
+                    const bestIsHigher = bestPointY < worstPointY;
+                    
+                    if (bestIsHigher) {
+                      // Best is higher, try to keep best above and move worst further down
+                      const newWorstY = bestRect.bottom + minSpacing;
+                      if (newWorstY + tooltipHeight <= 240) {
+                        worstPos = { ...worstPos, y: newWorstY };
+                      } else {
+                        // Can't move worst down, try moving best up
+                        const newBestY = worstRect.top - tooltipHeight - minSpacing;
+                        if (newBestY >= 0) {
+                          bestPos = { ...bestPos, y: newBestY };
+                        } else {
+                          // Both can't fit vertically, try horizontal separation
+                          if (bestPointX < worstPointX) {
+                            // Best is on left, worst is on right
+                            bestPos = { ...bestPos, x: Math.max(0, worstRect.left - tooltipWidth - minSpacing) };
+                          } else {
+                            // Worst is on left, best is on right
+                            worstPos = { ...worstPos, x: Math.max(0, bestRect.left - tooltipWidth - minSpacing) };
+                          }
+                        }
+                      }
+                    } else {
+                      // Worst is higher, try to keep worst above and move best further down
+                      const newBestY = worstRect.bottom + minSpacing;
+                      if (newBestY + tooltipHeight <= 240) {
+                        bestPos = { ...bestPos, y: newBestY };
+                      } else {
+                        // Can't move best down, try moving worst up
+                        const newWorstY = bestRect.top - tooltipHeight - minSpacing;
+                        if (newWorstY >= 0) {
+                          worstPos = { ...worstPos, y: newWorstY };
+                        } else {
+                          // Both can't fit vertically, try horizontal separation
+                          if (bestPointX < worstPointX) {
+                            // Best is on left, worst is on right
+                            bestPos = { ...bestPos, x: Math.max(0, worstRect.left - tooltipWidth - minSpacing) };
+                          } else {
+                            // Worst is on left, best is on right
+                            worstPos = { ...worstPos, x: Math.max(0, bestRect.left - tooltipWidth - minSpacing) };
+                          }
+                        }
+                      }
+                    }
+                  }
+                  
+                  // Re-check overlap after vertical adjustment
+                  const bestRectAfter = {
+                    left: bestPos.x,
+                    right: bestPos.x + tooltipWidth,
+                    top: bestPos.y,
+                    bottom: bestPos.y + tooltipHeight,
+                  };
+                  
+                  const worstRectAfter = {
+                    left: worstPos.x,
+                    right: worstPos.x + tooltipWidth,
+                    top: worstPos.y,
+                    bottom: worstPos.y + tooltipHeight,
+                  };
+                  
+                  const stillOverlaps = !(
+                    bestRectAfter.right + minSpacing < worstRectAfter.left ||
+                    worstRectAfter.right + minSpacing < bestRectAfter.left ||
+                    bestRectAfter.bottom + minSpacing < worstRectAfter.top ||
+                    worstRectAfter.bottom + minSpacing < bestRectAfter.top
+                  );
+                  
+                  // If still overlapping, try horizontal separation
+                  if (stillOverlaps && horizontalSeparation < tooltipWidth + minSpacing) {
+                    if (bestPointX < worstPointX) {
+                      // Best is on left, move best further left or worst further right
+                      const newBestX = worstRectAfter.left - tooltipWidth - minSpacing;
+                      if (newBestX >= 0) {
+                        bestPos = { ...bestPos, x: newBestX };
+                      } else {
+                        // Can't move best left, try moving worst right
+                        const newWorstX = bestRectAfter.right + minSpacing;
+                        if (newWorstX + tooltipWidth <= 600) {
+                          worstPos = { ...worstPos, x: newWorstX };
+                        }
+                      }
+                    } else {
+                      // Worst is on left, move worst further left or best further right
+                      const newWorstX = bestRectAfter.left - tooltipWidth - minSpacing;
+                      if (newWorstX >= 0) {
+                        worstPos = { ...worstPos, x: newWorstX };
+                      } else {
+                        // Can't move worst left, try moving best right
+                        const newBestX = worstRectAfter.right + minSpacing;
+                        if (newBestX + tooltipWidth <= 600) {
+                          bestPos = { ...bestPos, x: newBestX };
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            
+            // Set tooltip positions in state
+            setBestTooltipPos(bestPos);
+            setWorstTooltipPos(worstPos);
+            
+            // Also dispatch a custom event for additional reliability
+            const event = new CustomEvent('canvasReady', { detail: { canvas } });
+            canvas.dispatchEvent(event);
+          });
+        });
     }
   }, [cumulativeData, bestPosition, worstPosition]);
 
