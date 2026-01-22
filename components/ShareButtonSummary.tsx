@@ -139,25 +139,39 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
       
+      // Wait for component to mount and be in DOM
       let element = document.getElementById('share-card-summary');
-      if (!element) {
-        // Try waiting a bit more for component to mount
-        await new Promise(resolve => setTimeout(resolve, 200));
+      let elementReady = false;
+      let mountAttempts = 0;
+      const maxMountAttempts = 15; // Wait up to 1.5 seconds for component to mount
+      
+      while (!elementReady && mountAttempts < maxMountAttempts) {
         element = document.getElementById('share-card-summary');
+        
+        if (element) {
+          // Check if element is actually rendered (has dimensions)
+          const rect = element.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            elementReady = true;
+            break;
+          }
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+        mountAttempts++;
       }
       
       if (!element) {
-        // Final attempt with longer wait
-        await new Promise(resolve => setTimeout(resolve, 500));
-        element = document.getElementById('share-card-summary');
-      }
-      
-      if (!element) {
-        throw new Error('Share card element not found');
+        throw new Error('Share card element not found after waiting');
       }
 
       // Critical: Wait for background and all React state updates to be fully rendered
+      // Also wait for React to finish all state updates and re-renders
       await new Promise(resolve => setTimeout(resolve, 800));
+      
+      // Wait for React to complete any pending updates
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Ensure background image is loaded
       const bgStyle = window.getComputedStyle(element as HTMLElement);
@@ -272,25 +286,60 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Ensure canvas is fully rendered and drawn
-      const canvas = element.querySelector('canvas') as HTMLCanvasElement;
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          // Force canvas to flush by reading pixel data from multiple locations
-          // This ensures the canvas is fully painted
-          ctx.getImageData(0, 0, 1, 1);
-          ctx.getImageData(canvas.width - 1, canvas.height - 1, 1, 1);
-          ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1);
-          
-          // Ensure canvas is fully painted with multiple animation frames
-          await new Promise(resolve => requestAnimationFrame(resolve));
-          await new Promise(resolve => requestAnimationFrame(resolve));
-          await new Promise(resolve => requestAnimationFrame(resolve));
-          await new Promise(resolve => requestAnimationFrame(resolve));
-          
-          // Additional wait to ensure canvas rendering is complete
-          await new Promise(resolve => setTimeout(resolve, 300));
+      // Wait for canvas to exist and be drawn (it's drawn in a useEffect)
+      let canvas = element.querySelector('canvas') as HTMLCanvasElement;
+      let canvasReady = false;
+      let attempts = 0;
+      const maxAttempts = 20; // Wait up to 2 seconds for canvas
+      
+      while (!canvasReady && attempts < maxAttempts) {
+        canvas = element.querySelector('canvas') as HTMLCanvasElement;
+        
+        if (canvas) {
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            // Check if canvas has been drawn by reading a pixel
+            // If canvas is drawn, it should have non-transparent pixels
+            try {
+              const imageData = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1);
+              const hasContent = imageData.data[3] > 0; // Check alpha channel
+              
+              // Also check if canvas dimensions are correct
+              if (canvas.width === 600 && canvas.height === 240 && hasContent) {
+                canvasReady = true;
+                
+                // Force canvas to flush by reading pixel data from multiple locations
+                ctx.getImageData(0, 0, 1, 1);
+                ctx.getImageData(canvas.width - 1, canvas.height - 1, 1, 1);
+                ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1);
+                
+                // Ensure canvas is fully painted with multiple animation frames
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                
+                // Additional wait to ensure canvas rendering is complete
+                await new Promise(resolve => setTimeout(resolve, 300));
+                break;
+              }
+            } catch (e) {
+              // Canvas might not be ready yet
+            }
+          }
         }
+        
+        // Wait a bit before checking again
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      
+      // If canvas still not ready, wait a bit more and proceed anyway
+      if (!canvasReady) {
+        console.warn('[ShareButtonSummary] Canvas may not be fully ready, waiting additional time...');
+        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        await new Promise(resolve => requestAnimationFrame(resolve));
       }
 
       // Final wait to ensure all rendering is complete before capture
