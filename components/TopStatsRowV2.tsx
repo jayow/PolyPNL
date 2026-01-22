@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect, useRef } from 'react';
 import { PositionSummary } from '@/types';
 import { ClosedPosition } from '@/types';
 
@@ -43,6 +44,9 @@ function formatDays(days: number): string {
 }
 
 export default function TopStatsRowV2({ summary, positions, username, profileImage, wallet }: TopStatsRowV2Props) {
+  const tagsContainerRef = useRef<HTMLDivElement>(null);
+  const [displayedTags, setDisplayedTags] = useState<string[]>([]);
+  
   // Calculate YES/NO stats (same logic as YesNoAnalytics, no changes)
   const yesPositions = positions.filter(pos => pos.side === 'Long YES');
   const noPositions = positions.filter(pos => pos.side === 'Long NO');
@@ -59,10 +63,53 @@ export default function TopStatsRowV2({ summary, positions, username, profileIma
   const noAvgPnL = noPositions.length > 0 ? noPnL / noPositions.length : 0;
   const noCount = noPositions.length;
 
-  // Get top 3 tags (using existing data)
-  const topTags = summary.topTags && summary.topTags.length > 0 
-    ? summary.topTags.slice(0, 3)
+  // Get all available tags
+  const allTags = summary.topTags && summary.topTags.length > 0 
+    ? summary.topTags
     : (summary.mostUsedTag ? [summary.mostUsedTag] : []);
+
+  // Determine how many tags fit on one line
+  useEffect(() => {
+    if (tagsContainerRef.current && allTags.length > 0) {
+      const container = tagsContainerRef.current;
+      const containerWidth = container.offsetWidth;
+      
+      // Test how many tags fit
+      const testTags = (count: number): boolean => {
+        // Create temporary elements to measure
+        const tempContainer = document.createElement('div');
+        tempContainer.style.cssText = 'position: absolute; visibility: hidden; display: flex; gap: 4px;';
+        tempContainer.className = 'flex flex-nowrap gap-1';
+        
+        const tagsToTest = allTags.slice(0, count);
+        tagsToTest.forEach(tag => {
+          const span = document.createElement('span');
+          span.className = 'text-[11.7px] text-hyper-textSecondary px-1.5 py-0.5 bg-hyper-panelHover rounded whitespace-nowrap flex-shrink-0';
+          span.textContent = tag;
+          tempContainer.appendChild(span);
+        });
+        
+        document.body.appendChild(tempContainer);
+        const totalWidth = tempContainer.offsetWidth;
+        document.body.removeChild(tempContainer);
+        
+        return totalWidth <= containerWidth;
+      };
+      
+      // Start with 3 tags, reduce if needed
+      let tagCount = Math.min(3, allTags.length);
+      if (!testTags(tagCount)) {
+        tagCount = 2;
+        if (!testTags(tagCount)) {
+          tagCount = 1;
+        }
+      }
+      
+      setDisplayedTags(allTags.slice(0, tagCount));
+    } else {
+      setDisplayedTags(allTags);
+    }
+  }, [allTags]);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[150px_1.5fr_1fr_0.9fr_0.9fr_150px] gap-2 mb-2">
@@ -170,10 +217,10 @@ export default function TopStatsRowV2({ summary, positions, username, profileIma
           </div>
           <div className="text-center">
             <div className="text-[9px] text-hyper-textSecondary mb-0.5">Top Tags</div>
-            <div className="flex flex-wrap gap-1 justify-center">
-              {topTags.length > 0 ? (
-                topTags.map((tag, idx) => (
-                  <span key={idx} className="text-[11.7px] text-hyper-textSecondary px-1.5 py-0.5 bg-hyper-panelHover rounded">
+            <div ref={tagsContainerRef} className="flex flex-nowrap gap-1 justify-center overflow-hidden" style={{ height: '24px', minHeight: '24px', maxHeight: '24px' }}>
+              {displayedTags.length > 0 ? (
+                displayedTags.map((tag, idx) => (
+                  <span key={idx} className="text-[11.7px] text-hyper-textSecondary px-1.5 py-0.5 bg-hyper-panelHover rounded whitespace-nowrap flex-shrink-0">
                     {tag}
                   </span>
                 ))
