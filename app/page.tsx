@@ -259,6 +259,7 @@ export default function Home() {
                     username={resolveResult?.username}
                     profileImage={resolveResult?.profileImage}
                     wallet={wallet}
+                    resolveResult={resolveResult}
                   />
                 )}
 

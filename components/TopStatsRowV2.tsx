@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { PositionSummary } from '@/types';
-import { ClosedPosition } from '@/types';
+import { ClosedPosition, ProxyWalletResponse } from '@/types';
+import ShareButtonSummary from './ShareButtonSummary';
 
 interface TopStatsRowV2Props {
   summary: PositionSummary;
@@ -10,6 +11,7 @@ interface TopStatsRowV2Props {
   username?: string | null;
   profileImage?: string | null;
   wallet?: string;
+  resolveResult?: ProxyWalletResponse | null;
 }
 
 // Reuse existing formatting functions (no logic changes)
@@ -43,7 +45,7 @@ function formatDays(days: number): string {
   }
 }
 
-export default function TopStatsRowV2({ summary, positions, username, profileImage, wallet }: TopStatsRowV2Props) {
+export default function TopStatsRowV2({ summary, positions, username, profileImage, wallet, resolveResult }: TopStatsRowV2Props) {
   const tagsContainerRef = useRef<HTMLDivElement>(null);
   const [displayedTags, setDisplayedTags] = useState<string[]>([]);
   
@@ -307,14 +309,12 @@ export default function TopStatsRowV2({ summary, positions, username, profileIma
       </div>
 
       {/* Card 5: Share Stats */}
-      <div className="bg-hyper-panel border border-hyper-border rounded py-3 px-3 flex flex-col items-center justify-center h-full">
-        <div className="text-lg text-hyper-textSecondary tracking-wide mb-2">Share</div>
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-hyper-textSecondary">
-          <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
-          <polyline points="16 6 12 2 8 6"></polyline>
-          <line x1="12" y1="2" x2="12" y2="15"></line>
-        </svg>
-      </div>
+      <ShareButtonSummary
+        summary={summary}
+        positions={positions}
+        wallet={wallet || ''}
+        resolveResult={resolveResult || null}
+      />
     </div>
   );
 }
