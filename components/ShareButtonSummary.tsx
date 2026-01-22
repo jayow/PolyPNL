@@ -155,8 +155,49 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
 
       // Since we're using a pre-rendered element, we just need a small wait
       // for any recent background changes to apply
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 300));
       await new Promise(resolve => requestAnimationFrame(resolve));
+
+      // CRITICAL: Validate canvas is properly rendered with actual content
+      const canvas = element.querySelector('canvas') as HTMLCanvasElement;
+      if (!canvas) {
+        throw new Error('Canvas element not found');
+      }
+
+      // Wait for canvas ready signal
+      let canvasReadyAttempts = 0;
+      const maxCanvasAttempts = 20;
+      while (canvas.getAttribute('data-canvas-ready') !== 'true' && canvasReadyAttempts < maxCanvasAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        canvasReadyAttempts++;
+      }
+
+      if (canvas.getAttribute('data-canvas-ready') !== 'true') {
+        console.warn('Canvas ready signal not received, proceeding anyway');
+      }
+
+      // Validate canvas has actual content (not blank)
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const hasContent = imageData.data.some((pixel, index) => {
+          // Check alpha channel (every 4th value)
+          if ((index + 1) % 4 === 0) {
+            return pixel > 0;
+          }
+          return false;
+        });
+        
+        if (!hasContent) {
+          console.warn('Canvas appears blank, waiting for content...');
+          await new Promise(resolve => setTimeout(resolve, 500));
+          await new Promise(resolve => requestAnimationFrame(resolve));
+        }
+        
+        // Force canvas to flush any pending operations
+        ctx.getImageData(0, 0, 1, 1);
+        await new Promise(resolve => requestAnimationFrame(resolve));
+      }
 
       // Ensure background image is loaded
       const bgStyle = window.getComputedStyle(element as HTMLElement);
@@ -272,27 +313,25 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       await new Promise(resolve => setTimeout(resolve, 200));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
-      // Ensure canvas is ready (should already be ready since it's pre-rendered)
-      const canvas = element.querySelector('canvas') as HTMLCanvasElement;
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          // Quick check - canvas should already be ready, but verify
-          const hasReadySignal = canvas.getAttribute('data-canvas-ready') === 'true';
-          if (hasReadySignal && canvas.width === 600 && canvas.height === 240) {
-            // Force canvas to flush
-            ctx.getImageData(0, 0, 1, 1);
-            await new Promise(resolve => requestAnimationFrame(resolve));
-          } else {
-            // If not ready, wait a bit (shouldn't happen with pre-rendered element)
-            await new Promise(resolve => setTimeout(resolve, 300));
-            await new Promise(resolve => requestAnimationFrame(resolve));
+      // Final canvas validation before generating image
+      const finalCanvas = element.querySelector('canvas') as HTMLCanvasElement;
+      if (finalCanvas) {
+        const finalCtx = finalCanvas.getContext('2d');
+        if (finalCtx) {
+          const finalImageData = finalCtx.getImageData(0, 0, finalCanvas.width, finalCanvas.height);
+          const hasFinalContent = finalImageData.data.some((pixel, index) => {
+            if ((index + 1) % 4 === 0) {
+              return pixel > 0;
+            }
+            return false;
+          });
+          
+          if (!hasFinalContent) {
+            throw new Error('Canvas content lost during image conversion');
           }
         }
       }
 
-      // Final quick check - pre-rendered element should already be ready
-      // Just ensure fonts are loaded
       await document.fonts.ready;
       await new Promise(resolve => requestAnimationFrame(resolve));
 
