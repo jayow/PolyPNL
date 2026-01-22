@@ -28,11 +28,7 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
     setUploadError(null);
     setIsGenerating(false);
     setImageUrl(null);
-    // Use the pre-rendered hidden element - it should already be ready
-    // Just need a small delay for modal to show, then capture immediately
-    setTimeout(() => {
-      generateImage();
-    }, 100);
+    // DON'T generate immediately - let user trigger it
   };
 
   const handleBackgroundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -95,13 +91,8 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         setCustomBackground(fittedDataUrl);
         setUploadError(null);
         
-        // Regenerate the image with the new background
-        // Hidden element will update automatically, just need a moment for React
-        setTimeout(() => {
-          setIsGenerating(true);
-          setImageUrl(null);
-          generateImage();
-        }, 200);
+        // Background updated - user can click "Generate Image" when ready
+        setImageUrl(null);
       };
 
       img.onerror = () => {
@@ -119,13 +110,7 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
   const handleRemoveBackground = () => {
     setCustomBackground(null);
     setUploadError(null);
-    if (showModal) {
-      setTimeout(() => {
-        setIsGenerating(true);
-        setImageUrl(null);
-        generateImage();
-      }, 200);
-    }
+    setImageUrl(null);
   };
 
   const generateImage = async () => {
@@ -134,54 +119,42 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       setError(null);
       setImageUrl(null);
 
-      // Wait for fonts to be ready
+      // Wait for modal to fully render
       await document.fonts.ready;
-      
+      await new Promise(resolve => setTimeout(resolve, 500)); // Give extra time for modal
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
       
-      // Wait for component to mount and be in DOM
-      // Use the pre-rendered hidden element (should already be ready)
-      let element = document.getElementById('share-card-summary-hidden');
-      
-      // If hidden element not found, fall back to visible one (shouldn't happen)
-      if (!element) {
-        element = document.getElementById('share-card-summary');
-      }
+      // Use ONLY the visible element in the modal
+      const element = document.getElementById('share-card-summary');
       
       if (!element) {
-        throw new Error('Share card element not found');
+        throw new Error('Share card element not found - modal may not be open');
       }
 
-      // Since we're using a pre-rendered element, we just need a small wait
-      // for any recent background changes to apply
-      await new Promise(resolve => setTimeout(resolve, 300));
-      await new Promise(resolve => requestAnimationFrame(resolve));
-
-      // CRITICAL: Validate canvas is properly rendered with actual content
+      // CRITICAL: Validate canvas is properly rendered
       const canvas = element.querySelector('canvas') as HTMLCanvasElement;
       if (!canvas) {
         throw new Error('Canvas element not found');
       }
-
-      // Wait for canvas ready signal
+      
+      // Wait for canvas ready signal with timeout
       let canvasReadyAttempts = 0;
-      const maxCanvasAttempts = 20;
+      const maxCanvasAttempts = 30; // Increase timeout for on-demand rendering
       while (canvas.getAttribute('data-canvas-ready') !== 'true' && canvasReadyAttempts < maxCanvasAttempts) {
         await new Promise(resolve => setTimeout(resolve, 100));
         canvasReadyAttempts++;
       }
-
+      
       if (canvas.getAttribute('data-canvas-ready') !== 'true') {
-        console.warn('Canvas ready signal not received, proceeding anyway');
+        throw new Error('Canvas failed to render - try again');
       }
-
+      
       // Validate canvas has actual content (not blank)
       const ctx = canvas.getContext('2d');
       if (ctx) {
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const hasContent = imageData.data.some((pixel, index) => {
-          // Check alpha channel (every 4th value)
           if ((index + 1) % 4 === 0) {
             return pixel > 0;
           }
@@ -189,12 +162,10 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         });
         
         if (!hasContent) {
-          console.warn('Canvas appears blank, waiting for content...');
-          await new Promise(resolve => setTimeout(resolve, 500));
-          await new Promise(resolve => requestAnimationFrame(resolve));
+          throw new Error('Canvas is blank - graph not rendered. Please try again.');
         }
         
-        // Force canvas to flush any pending operations
+        // Force canvas to flush
         ctx.getImageData(0, 0, 1, 1);
         await new Promise(resolve => requestAnimationFrame(resolve));
       }
@@ -309,8 +280,8 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       }
       
       // Wait for images to be converted and DOM to update
-      // Since element is pre-rendered, images should already be loaded
-      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Final canvas validation before generating image
@@ -432,19 +403,6 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
 
   return (
     <>
-      {/* Pre-render ShareCardSummary in the background (hidden) so it's always ready */}
-      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', visibility: 'hidden', pointerEvents: 'none' }}>
-        <ShareCardSummary
-          id="share-card-summary-hidden"
-          summary={summary}
-          positions={positions}
-          username={resolveResult?.username}
-          profileImage={resolveResult?.profileImage}
-          wallet={resolveResult?.userAddressUsed || wallet}
-          customBackground={customBackground}
-        />
-      </div>
-
       <div 
         onClick={handleShare}
         className="bg-hyper-panel border border-hyper-border rounded py-3 px-3 flex flex-col items-center justify-center h-full cursor-pointer hover:bg-hyper-panelHover transition-colors"
@@ -477,7 +435,7 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
 
             <div className="p-4">
               {/* Share Card Preview */}
-              <div className="mb-4 flex justify-center">
+              <div className="mb-4 flex justify-center" style={{ minHeight: `${SHARE_H}px` }}>
                 <ShareCardSummary
                   id="share-card-summary"
                   summary={summary}
@@ -535,6 +493,17 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
                 </div>
               )}
 
+              {/* Show Generate button if no image yet */}
+              {!imageUrl && !isGenerating && (
+                <button
+                  onClick={generateImage}
+                  className="w-full px-4 py-2 bg-hyper-accent hover:bg-hyper-accent/80 rounded text-white font-semibold"
+                >
+                  Generate Image
+                </button>
+              )}
+
+              {/* Show Copy/Download once image is ready */}
               {imageUrl && (
                 <div className="flex gap-2">
                   <button
