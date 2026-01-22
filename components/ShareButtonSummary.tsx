@@ -121,18 +121,15 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
 
       // Wait for modal to fully render
       await document.fonts.ready;
-      await new Promise(resolve => setTimeout(resolve, 500)); // Give extra time for modal
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => setTimeout(resolve, 300));
       
-      // Use ONLY the visible element in the modal
       const element = document.getElementById('share-card-summary');
       
       if (!element) {
         throw new Error('Share card element not found - modal may not be open');
       }
 
-      // CRITICAL: Validate canvas is properly rendered
+      // CRITICAL: Wait for canvas to be ready AND painted
       const canvas = element.querySelector('canvas') as HTMLCanvasElement;
       if (!canvas) {
         throw new Error('Canvas element not found');
@@ -140,7 +137,7 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       
       // Wait for canvas ready signal with timeout
       let canvasReadyAttempts = 0;
-      const maxCanvasAttempts = 30; // Increase timeout for on-demand rendering
+      const maxCanvasAttempts = 30;
       while (canvas.getAttribute('data-canvas-ready') !== 'true' && canvasReadyAttempts < maxCanvasAttempts) {
         await new Promise(resolve => setTimeout(resolve, 100));
         canvasReadyAttempts++;
@@ -149,6 +146,13 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       if (canvas.getAttribute('data-canvas-ready') !== 'true') {
         throw new Error('Canvas failed to render - try again');
       }
+      
+      // EXTRA WAIT: Even after ready signal, wait for actual paint
+      // The ready signal is set immediately after drawLineGraph() completes,
+      // but the browser may not have painted those pixels to the screen yet
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
       
       // Validate canvas has actual content (not blank)
       const ctx = canvas.getContext('2d');
