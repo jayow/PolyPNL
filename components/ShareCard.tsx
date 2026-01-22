@@ -160,7 +160,6 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
           flexShrink: 0,
           gap: '20px',
           marginLeft: `-${SAFE_PAD*0.5}px`,
-          paddingTop: '0',
         }}>
           <div
             style={{
@@ -176,42 +175,28 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
               position: 'relative',
             }}
           >
-            {/* Fallback */}
-            <div
+            {/* Always render an image - either the market icon or polysquare.webp fallback */}
+            <img 
+              src={marketIconUrl ? `/api/image-proxy?url=${encodeURIComponent(marketIconUrl)}` : '/polysquare.webp'}
+              alt=""
+              {...(marketIconUrl ? { crossOrigin: "anonymous" } : {})}
               style={{
-                position: 'absolute',
-                inset: '0',
-                background: '#121A24',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '120px',
-                fontWeight: 'bold',
-                color: '#E6EDF6',
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                display: 'block',
+                position: 'relative',
+                zIndex: 1,
               }}
-            >
-              {firstLetter}
-            </div>
-            
-            {/* Image - using proxy to avoid CORS */}
-            {marketIconUrl && (
-              <img 
-                src={`/api/image-proxy?url=${encodeURIComponent(marketIconUrl)}`}
-                alt=""
-                crossOrigin="anonymous"
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit: 'cover',
-                  display: 'block',
-                  position: 'relative',
-                  zIndex: 1,
-                }}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).style.display = 'none';
-                }}
-              />
-            )}
+              onError={(e) => {
+                // If market icon fails to load, fallback to polysquare.webp
+                const img = e.target as HTMLImageElement;
+                if (marketIconUrl && !img.src.includes('polysquare.webp')) {
+                  img.src = '/polysquare.webp';
+                  img.removeAttribute('crossOrigin');
+                }
+              }}
+            />
           </div>
         </div>
 
@@ -298,9 +283,9 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
               minWidth: '0',
               maxWidth: '100%',
               lineHeight: '0.95',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
+              overflow: 'visible',
               whiteSpace: 'nowrap',
+              textOverflow: 'clip',
             }}
           >
             {position.realizedPnLPercent >= 0 ? '+' : ''}{position.realizedPnLPercent.toFixed(1)}%

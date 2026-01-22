@@ -253,7 +253,13 @@ export default function Home() {
               <>
                 {/* Top Analytics Row - Redesigned 4-Card Layout */}
                 {summary && positions.length > 0 && (
-                  <TopStatsRowV2 summary={summary} positions={filteredPositions} />
+                  <TopStatsRowV2 
+                    summary={summary} 
+                    positions={filteredPositions}
+                    username={resolveResult?.username}
+                    profileImage={resolveResult?.profileImage}
+                    wallet={wallet}
+                  />
                 )}
 
                 {/* PnL Graph and Calendar View Side by Side */}
