@@ -286,45 +286,71 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       await new Promise(resolve => setTimeout(resolve, 500));
 
       // Ensure canvas is fully rendered and drawn
-      // Wait for canvas to exist and be drawn (it's drawn in a useEffect)
+      // Wait for canvas to exist, be drawn, and signal it's ready
       let canvas = element.querySelector('canvas') as HTMLCanvasElement;
       let canvasReady = false;
       let attempts = 0;
-      const maxAttempts = 20; // Wait up to 2 seconds for canvas
+      const maxAttempts = 30; // Wait up to 3 seconds for canvas
       
       while (!canvasReady && attempts < maxAttempts) {
         canvas = element.querySelector('canvas') as HTMLCanvasElement;
         
         if (canvas) {
-          const ctx = canvas.getContext('2d');
-          if (ctx) {
-            // Check if canvas has been drawn by reading a pixel
-            // If canvas is drawn, it should have non-transparent pixels
-            try {
-              const imageData = ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1);
-              const hasContent = imageData.data[3] > 0; // Check alpha channel
-              
-              // Also check if canvas dimensions are correct
-              if (canvas.width === 600 && canvas.height === 240 && hasContent) {
-                canvasReady = true;
+          // Check if canvas has the ready signal from ShareCardSummary
+          const hasReadySignal = canvas.getAttribute('data-canvas-ready') === 'true';
+          
+          if (hasReadySignal) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              // Verify canvas dimensions are correct
+              if (canvas.width === 600 && canvas.height === 240) {
+                // Verify canvas actually has content by checking multiple points
+                // The graph line should be visible (non-transparent pixels)
+                let hasValidContent = false;
+                try {
+                  // Check multiple points along where the line should be
+                  const checkPoints = [
+                    [50, 120], // Left side
+                    [300, 120], // Middle
+                    [550, 120], // Right side
+                  ];
+                  
+                  let contentFound = 0;
+                  for (const [x, y] of checkPoints) {
+                    const imageData = ctx.getImageData(x, y, 1, 1);
+                    // Check if there's any non-transparent content (alpha > 0)
+                    if (imageData.data[3] > 0) {
+                      contentFound++;
+                    }
+                  }
+                  
+                  // If we found content in at least one point, canvas is drawn
+                  // (Some points might be transparent if line doesn't pass through them)
+                  hasValidContent = contentFound > 0;
+                } catch (e) {
+                  // If we can't read pixels, assume it's ready if signal is set
+                  hasValidContent = true;
+                }
                 
-                // Force canvas to flush by reading pixel data from multiple locations
-                ctx.getImageData(0, 0, 1, 1);
-                ctx.getImageData(canvas.width - 1, canvas.height - 1, 1, 1);
-                ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1);
-                
-                // Ensure canvas is fully painted with multiple animation frames
-                await new Promise(resolve => requestAnimationFrame(resolve));
-                await new Promise(resolve => requestAnimationFrame(resolve));
-                await new Promise(resolve => requestAnimationFrame(resolve));
-                await new Promise(resolve => requestAnimationFrame(resolve));
-                
-                // Additional wait to ensure canvas rendering is complete
-                await new Promise(resolve => setTimeout(resolve, 300));
-                break;
+                if (hasValidContent) {
+                  canvasReady = true;
+                  
+                  // Force canvas to flush by reading pixel data from multiple locations
+                  ctx.getImageData(0, 0, 1, 1);
+                  ctx.getImageData(canvas.width - 1, canvas.height - 1, 1, 1);
+                  ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1);
+                  
+                  // Ensure canvas is fully painted with multiple animation frames
+                  await new Promise(resolve => requestAnimationFrame(resolve));
+                  await new Promise(resolve => requestAnimationFrame(resolve));
+                  await new Promise(resolve => requestAnimationFrame(resolve));
+                  await new Promise(resolve => requestAnimationFrame(resolve));
+                  
+                  // Additional wait to ensure canvas rendering is complete
+                  await new Promise(resolve => setTimeout(resolve, 400));
+                  break;
+                }
               }
-            } catch (e) {
-              // Canvas might not be ready yet
             }
           }
         }
@@ -334,10 +360,11 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         attempts++;
       }
       
-      // If canvas still not ready, wait a bit more and proceed anyway
+      // If canvas still not ready, wait significantly more and proceed
       if (!canvasReady) {
-        console.warn('[ShareButtonSummary] Canvas may not be fully ready, waiting additional time...');
-        await new Promise(resolve => setTimeout(resolve, 500));
+        console.warn('[ShareButtonSummary] Canvas ready signal not received, waiting additional time...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => requestAnimationFrame(resolve));
         await new Promise(resolve => requestAnimationFrame(resolve));
         await new Promise(resolve => requestAnimationFrame(resolve));
       }

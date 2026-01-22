@@ -508,6 +508,14 @@ export default function ShareCardSummary({
     if (canvasRef.current && cumulativeData.length > 0) {
       const canvas = canvasRef.current;
       drawLineGraph(canvas, cumulativeData, 600, 240, bestPosition, worstPosition);
+      
+      // Signal that canvas is ready by setting a data attribute
+      // This allows ShareButtonSummary to know when the canvas is fully drawn
+      canvas.setAttribute('data-canvas-ready', 'true');
+      
+      // Also dispatch a custom event for additional reliability
+      const event = new CustomEvent('canvasReady', { detail: { canvas } });
+      canvas.dispatchEvent(event);
     }
   }, [cumulativeData, bestPosition, worstPosition]);
 
