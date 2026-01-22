@@ -119,9 +119,13 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       setError(null);
       setImageUrl(null);
 
-      // Wait for modal to fully render
+      // CRITICAL: Wait for modal AND layout to fully settle
+      // CSS layout (flexbox, positioning, etc.) takes a moment to compute final positions
       await document.fonts.ready;
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 800)); // Increased from 300ms to 800ms for layout to settle
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve)); // Extra frame to ensure we're past multiple layout cycles
       
       const element = document.getElementById('share-card-summary');
       
