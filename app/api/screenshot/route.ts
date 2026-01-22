@@ -261,7 +261,7 @@ export async function POST(request: NextRequest) {
       await browser.close();
 
       // Convert to base64 data URL
-      const base64 = screenshot.toString('base64');
+      const base64 = Buffer.from(screenshot).toString('base64');
       const dataUrl = `data:image/jpeg;base64,${base64}`;
 
       console.log('[Screenshot API] Success! Returning image URL');

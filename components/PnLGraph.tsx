@@ -201,7 +201,6 @@ export default function PnLGraph({ positions }: PnLGraphProps) {
           />
           <YAxis 
             stroke="#9AA7B2"
-            tick={{ fill: '#9AA7B2', fontSize: 10 }}
             tickFormatter={(value) => formatNumber(value)}
             tick={(props) => {
               const { x, y, payload } = props;

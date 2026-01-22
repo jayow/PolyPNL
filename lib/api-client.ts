@@ -10,6 +10,7 @@ const REQUEST_TIMEOUT = 30000;
 // Simple in-memory cache for proxy wallet resolution and market metadata
 const proxyWalletCache: Map<string, string | null> = new Map();
 const marketMetadataCache: Map<string, MarketMetadata> = new Map();
+let hasLoggedMarketFields = false;
 
 /**
  * Fetch with timeout
@@ -1168,9 +1169,9 @@ export async function fetchMarketMetadata(
 
       if (market) {
         // Debug: Log all available fields to understand the structure (only for first few)
-        const isFirstFew = !marketMetadataCache.has('_logged');
+        const isFirstFew = !hasLoggedMarketFields;
         if (isFirstFew) {
-          marketMetadataCache.set('_logged', true);
+          hasLoggedMarketFields = true;
           console.log(`[fetchMarketMetadata] Market fields for ${conditionId}:`, Object.keys(market));
           if (market.event) {
             console.log(`[fetchMarketMetadata] Event fields:`, Object.keys(market.event));
@@ -1293,9 +1294,7 @@ export async function fetchMarketMetadata(
                 
                 if (!eventResponse || !eventResponse.ok) {
                   console.log(`[fetchMarketMetadata] All event API endpoints failed for slug: ${eventSlug}`);
-                }
-                
-                if (eventResponse.ok) {
+                } else if (eventResponse.ok) {
                   const eventData = await eventResponse.json();
                   const eventObj = Array.isArray(eventData) ? (eventData.length > 0 ? eventData[0] : null) : eventData;
                   
