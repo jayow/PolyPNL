@@ -28,10 +28,11 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
     setUploadError(null);
     setIsGenerating(false);
     setImageUrl(null);
-    // Wait for modal to render before generating image
+    // Wait for modal and ShareCardSummary to fully render before generating image
+    // Increased timeout to ensure canvas, images, and all elements are ready
     setTimeout(() => {
       generateImage();
-    }, 100);
+    }, 800);
   };
 
   const handleBackgroundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,8 +141,14 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       
       let element = document.getElementById('share-card-summary');
       if (!element) {
-        // Try waiting a bit more
-        await new Promise(resolve => setTimeout(resolve, 100));
+        // Try waiting a bit more for component to mount
+        await new Promise(resolve => setTimeout(resolve, 200));
+        element = document.getElementById('share-card-summary');
+      }
+      
+      if (!element) {
+        // Final attempt with longer wait
+        await new Promise(resolve => setTimeout(resolve, 500));
         element = document.getElementById('share-card-summary');
       }
       
@@ -149,8 +156,8 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         throw new Error('Share card element not found');
       }
 
-      // Critical: Wait for background to be fully rendered after React state update
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Critical: Wait for background and all React state updates to be fully rendered
+      await new Promise(resolve => setTimeout(resolve, 800));
 
       // Ensure background image is loaded
       const bgStyle = window.getComputedStyle(element as HTMLElement);
@@ -261,8 +268,8 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         }
       }
       
-      // Wait for images to be converted
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Wait for images to be converted and DOM to update
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       // Ensure canvas is fully rendered and drawn
       const canvas = element.querySelector('canvas') as HTMLCanvasElement;
@@ -279,11 +286,16 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
           await new Promise(resolve => requestAnimationFrame(resolve));
           await new Promise(resolve => requestAnimationFrame(resolve));
           await new Promise(resolve => requestAnimationFrame(resolve));
+          await new Promise(resolve => requestAnimationFrame(resolve));
           
           // Additional wait to ensure canvas rendering is complete
-          await new Promise(resolve => setTimeout(resolve, 150));
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
       }
+
+      // Final wait to ensure all rendering is complete before capture
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Generate image
       const dataUrl = await toPng(element as HTMLElement, {
