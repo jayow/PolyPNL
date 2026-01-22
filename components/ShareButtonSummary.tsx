@@ -94,12 +94,12 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         setCustomBackground(fittedDataUrl);
         setUploadError(null);
         
-        // Regenerate the image with the new background
+        // Regenerate the image with the new background - increased wait time for React to render
         setTimeout(() => {
           setIsGenerating(true);
           setImageUrl(null);
           generateImage();
-        }, 100);
+        }, 300);
       };
 
       img.onerror = () => {
@@ -122,7 +122,7 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         setIsGenerating(true);
         setImageUrl(null);
         generateImage();
-      }, 100);
+      }, 300);
     }
   };
 
@@ -132,7 +132,9 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       setError(null);
       setImageUrl(null);
 
-      // Wait for the element to be rendered
+      // Wait for fonts to be ready
+      await document.fonts.ready;
+      
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
       
@@ -147,52 +149,159 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         throw new Error('Share card element not found');
       }
 
-      // Don't override the background - ShareCardSummary already handles it via the customBackground prop
-      // Just ensure the default background is loaded if needed
-      if (!customBackground) {
-        // Preload default background to ensure it's ready for capture
-        const bgImg = new Image();
-        bgImg.crossOrigin = 'anonymous';
-        bgImg.src = '/bg.png';
-        
-        await new Promise((resolve, reject) => {
-          bgImg.onload = resolve;
-          bgImg.onerror = reject;
-        });
-      }
+      // Critical: Wait for background to be fully rendered after React state update
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Convert images to base64 before capture
-      const images = element.querySelectorAll('img');
-      const imagePromises = Array.from(images).map(async (img) => {
-        if (img.src.startsWith('http') && !img.src.includes('data:')) {
-          try {
-            const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(img.src)}`;
-            const response = await fetch(proxyUrl);
-            const blob = await response.blob();
-            const reader = new FileReader();
-            return new Promise<string>((resolve) => {
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = () => resolve(img.src);
-              reader.readAsDataURL(blob);
-            });
-          } catch (err) {
-            console.warn('Failed to convert image to base64:', err);
-            return img.src;
+      // Ensure background image is loaded
+      const bgStyle = window.getComputedStyle(element as HTMLElement);
+      const bgImage = bgStyle.backgroundImage;
+      
+      if (bgImage && bgImage !== 'none' && bgImage.includes('url')) {
+        const urlMatch = bgImage.match(/url\(['"]?(.+?)['"]?\)/);
+        if (urlMatch && urlMatch[1]) {
+          const bgUrl = urlMatch[1];
+          
+          // If it's a regular URL (not base64), preload it
+          if (!bgUrl.startsWith('data:')) {
+            try {
+              const bgImg = new Image();
+              bgImg.crossOrigin = 'anonymous';
+              bgImg.src = bgUrl;
+              
+              await new Promise<void>((resolve) => {
+                const timeout = setTimeout(() => resolve(), 3000);
+                bgImg.onload = () => {
+                  clearTimeout(timeout);
+                  resolve();
+                };
+                bgImg.onerror = () => {
+                  clearTimeout(timeout);
+                  resolve();
+                };
+              });
+            } catch (e) {
+              console.warn('Failed to preload background:', e);
+            }
           }
         }
-        return img.src;
+      }
+
+      // Wait for all images to load
+      const images = element.querySelectorAll('img');
+      const imagePromises = Array.from(images).map((img) => {
+        if (img.complete && img.naturalWidth > 0) {
+          return Promise.resolve();
+        }
+        return new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => {
+            resolve();
+          }, 2000);
+          
+          img.onload = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+          img.onerror = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+        });
       });
 
       await Promise.all(imagePromises);
+      
+      await new Promise(resolve => requestAnimationFrame(resolve));
+
+      // Convert external images to base64 via proxy
+      const imageElements = Array.from(element.querySelectorAll('img')) as HTMLImageElement[];
+      
+      for (const img of imageElements) {
+        if (img.style.display === 'none' || !img.complete || img.naturalWidth === 0) {
+          continue;
+        }
+        
+        const originalSrc = img.src;
+        
+        if (originalSrc.startsWith('data:') || !originalSrc || originalSrc === window.location.href) {
+          continue;
+        }
+        
+        const isLocalImage = originalSrc.startsWith('/') && !originalSrc.startsWith('//') && !originalSrc.includes('/api/image-proxy');
+        if (isLocalImage) {
+          continue;
+        }
+        
+        if (!img.dataset.originalSrc) {
+          img.dataset.originalSrc = originalSrc;
+        }
+        
+        // Convert all external images (including proxied ones) to base64
+        try {
+          let fetchUrl = originalSrc;
+          
+          // If it's already a proxy URL, use it directly; otherwise, create a proxy URL
+          if (!originalSrc.includes('/api/image-proxy')) {
+            fetchUrl = `/api/image-proxy?url=${encodeURIComponent(originalSrc)}`;
+          }
+          
+          const response = await fetch(fetchUrl);
+          
+          if (response.ok) {
+            const blob = await response.blob();
+            const reader = new FileReader();
+            const base64 = await new Promise<string>((resolve, reject) => {
+              reader.onloadend = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+            img.src = base64;
+          }
+        } catch (e) {
+          console.warn('Failed to convert image to base64:', originalSrc);
+        }
+      }
+      
+      // Wait for images to be converted
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Ensure canvas is fully rendered and drawn
+      const canvas = element.querySelector('canvas') as HTMLCanvasElement;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Force canvas to flush by reading pixel data from multiple locations
+          // This ensures the canvas is fully painted
+          ctx.getImageData(0, 0, 1, 1);
+          ctx.getImageData(canvas.width - 1, canvas.height - 1, 1, 1);
+          ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1);
+          
+          // Ensure canvas is fully painted with multiple animation frames
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          await new Promise(resolve => requestAnimationFrame(resolve));
+          
+          // Additional wait to ensure canvas rendering is complete
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
+      }
 
       // Generate image
-      const dataUrl = await toPng(element, {
-        quality: 1.0,
+      const dataUrl = await toPng(element as HTMLElement, {
+        backgroundColor: '#0B0F14',
         pixelRatio: 2,
+        cacheBust: true,
         width: SHARE_W,
         height: SHARE_H,
-        cacheBust: true,
+        skipAutoScale: true,
+        quality: 1.0,
       });
+
+      // Restore original image sources
+      for (const img of imageElements) {
+        if (img.dataset.originalSrc) {
+          img.src = img.dataset.originalSrc;
+        }
+      }
 
       setImageUrl(dataUrl);
       setIsGenerating(false);
@@ -207,11 +316,11 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
     if (!imageUrl) return;
 
     try {
-      // Convert data URL to blob
+      // Convert data URL to blob and directly to PNG for clipboard
       const response = await fetch(imageUrl);
       const blob = await response.blob();
 
-      // Convert JPEG to PNG for clipboard compatibility
+      // Convert to PNG blob for clipboard compatibility
       const img = new Image();
       img.src = imageUrl;
       
@@ -235,7 +344,22 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
               ]).then(() => {
                 setCopySuccess(true);
                 setTimeout(() => setCopySuccess(false), 2000);
-              }).catch(reject);
+                resolve(null);
+              }).catch((err) => {
+                console.error('Failed to copy to clipboard:', err);
+                // Fallback: try with the original blob
+                if (blob.type === 'image/png' || blob.type === 'image/jpeg') {
+                  navigator.clipboard.write([
+                    new ClipboardItem({ [blob.type]: blob })
+                  ]).then(() => {
+                    setCopySuccess(true);
+                    setTimeout(() => setCopySuccess(false), 2000);
+                    resolve(null);
+                  }).catch(reject);
+                } else {
+                  reject(err);
+                }
+              });
             } else {
               reject(new Error('Failed to convert to PNG'));
             }
@@ -262,8 +386,8 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         onClick={handleShare}
         className="bg-hyper-panel border border-hyper-border rounded py-3 px-3 flex flex-col items-center justify-center h-full cursor-pointer hover:bg-hyper-panelHover transition-colors"
       >
-        <div className="text-lg text-hyper-textSecondary tracking-wide mb-2">Share</div>
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-hyper-textSecondary">
+        <div className="text-lg text-hyper-accent tracking-wide mb-2">Share</div>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-hyper-accent">
           <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
           <polyline points="16 6 12 2 8 6"></polyline>
           <line x1="12" y1="2" x2="12" y2="15"></line>
