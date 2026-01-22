@@ -182,6 +182,8 @@ export default function ShareCardSummary({
   // Use state for tooltip positions so they can be recalculated after canvas renders
   const [bestTooltipPos, setBestTooltipPos] = useState<{ x: number; y: number; placement: 'right' | 'left' | 'top' | 'bottom' } | null>(null);
   const [worstTooltipPos, setWorstTooltipPos] = useState<{ x: number; y: number; placement: 'right' | 'left' | 'top' | 'bottom' } | null>(null);
+  // Add a ready flag to ensure tooltips don't render until layout is stable
+  const [tooltipsReady, setTooltipsReady] = useState(false);
 
   // Calculate tooltip positions for best and worst trades with edge awareness
   const getTooltipPosition = (
@@ -351,6 +353,9 @@ export default function ShareCardSummary({
   // Draw graph when component mounts or data changes
   useEffect(() => {
     if (canvasRef.current && cumulativeData.length > 0) {
+      // Reset tooltips ready flag when data changes
+      setTooltipsReady(false);
+      
       const canvas = canvasRef.current;
       drawLineGraph(canvas, cumulativeData, 600, 240, bestPosition, worstPosition);
       
@@ -532,6 +537,9 @@ export default function ShareCardSummary({
             setBestTooltipPos(bestPos);
             setWorstTooltipPos(worstPos);
             
+            // THEN mark as ready - ensures tooltips don't render until layout is stable
+            setTooltipsReady(true);
+            
             // Also dispatch a custom event for additional reliability
             const event = new CustomEvent('canvasReady', { detail: { canvas } });
             canvas.dispatchEvent(event);
@@ -697,7 +705,7 @@ export default function ShareCardSummary({
             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           />
           {/* Best Position Tooltip */}
-          {bestPosition && bestTooltipPos && (
+          {tooltipsReady && bestPosition && bestTooltipPos && (
             <div
               style={{
                 position: 'absolute',
@@ -738,7 +746,7 @@ export default function ShareCardSummary({
             </div>
           )}
           {/* Worst Position Tooltip */}
-          {worstPosition && worstTooltipPos && (
+          {tooltipsReady && worstPosition && worstTooltipPos && (
             <div
               style={{
                 position: 'absolute',
