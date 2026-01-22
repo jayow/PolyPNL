@@ -28,11 +28,15 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
     setUploadError(null);
     setIsGenerating(false);
     setImageUrl(null);
-    // Wait for modal and ShareCardSummary to fully render before generating image
-    // Increased timeout to ensure canvas, images, and all elements are ready
+    // Wait for modal and ShareCardSummary to fully mount and render
+    // Increased timeout significantly to ensure everything is ready:
+    // - Modal DOM insertion
+    // - ShareCardSummary component mount
+    // - React state propagation
+    // - Initial render cycle
     setTimeout(() => {
       generateImage();
-    }, 800);
+    }, 1200);
   };
 
   const handleBackgroundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -284,6 +288,31 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       
       // Wait for images to be converted and DOM to update
       await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Re-verify all images are loaded AFTER conversion
+      const imagesAfterConversion = element.querySelectorAll('img');
+      const imagePromisesAfter = Array.from(imagesAfterConversion).map((img) => {
+        if (img.complete && img.naturalWidth > 0) {
+          return Promise.resolve();
+        }
+        return new Promise<void>((resolve) => {
+          const timeout = setTimeout(() => resolve(), 2000);
+          img.onload = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+          img.onerror = () => {
+            clearTimeout(timeout);
+            resolve();
+          };
+        });
+      });
+      await Promise.all(imagePromisesAfter);
+      
+      // Wait for DOM to settle after image updates
+      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Ensure canvas is fully rendered and drawn
       // Wait for canvas to exist, be drawn, and signal it's ready
@@ -369,8 +398,58 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         await new Promise(resolve => requestAnimationFrame(resolve));
       }
 
-      // Final wait to ensure all rendering is complete before capture
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Final comprehensive readiness check before capture
+      // Ensure everything is stable: canvas, images, fonts, DOM
+      // Also check that dimensions are stable (no layout shifts)
+      let allReady = false;
+      let stableCount = 0;
+      const requiredStableChecks = 3; // Component must be stable for 3 consecutive checks
+      let finalAttempts = 0;
+      const maxFinalAttempts = 15;
+      let lastDimensions = { width: 0, height: 0 };
+      
+      while (stableCount < requiredStableChecks && finalAttempts < maxFinalAttempts) {
+        // Check canvas is ready
+        const canvas = element.querySelector('canvas') as HTMLCanvasElement;
+        const canvasReady = canvas && canvas.getAttribute('data-canvas-ready') === 'true';
+        
+        // Check all images are loaded
+        const allImages = element.querySelectorAll('img');
+        const imagesReady = Array.from(allImages).every(img => 
+          img.complete && img.naturalWidth > 0 && img.naturalHeight > 0
+        );
+        
+        // Check fonts are ready
+        const fontsReady = document.fonts.status === 'loaded' || document.fonts.status === 'loading';
+        
+        // Check element has dimensions and they're stable
+        const rect = element.getBoundingClientRect();
+        const currentDimensions = { width: rect.width, height: rect.height };
+        const hasDimensions = currentDimensions.width > 0 && currentDimensions.height > 0;
+        const dimensionsStable = 
+          currentDimensions.width === lastDimensions.width && 
+          currentDimensions.height === lastDimensions.height;
+        
+        if (canvasReady && imagesReady && fontsReady && hasDimensions && dimensionsStable) {
+          stableCount++;
+          if (stableCount >= requiredStableChecks) {
+            allReady = true;
+            break;
+          }
+        } else {
+          stableCount = 0; // Reset if not stable
+        }
+        
+        lastDimensions = currentDimensions;
+        await new Promise(resolve => setTimeout(resolve, 200));
+        finalAttempts++;
+      }
+      
+      // Final wait to ensure all rendering is complete and stable before capture
+      await new Promise(resolve => setTimeout(resolve, 600));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Generate image
