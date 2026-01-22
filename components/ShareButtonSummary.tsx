@@ -178,6 +178,42 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         await new Promise(resolve => requestAnimationFrame(resolve));
       }
 
+      // CRITICAL: Wait for tooltips to be positioned (they're in state)
+      // Check if the tooltip divs actually exist in the DOM with their calculated positions
+      let tooltipCheckAttempts = 0;
+      const maxTooltipAttempts = 20;
+      while (tooltipCheckAttempts < maxTooltipAttempts) {
+        // Find tooltips by their text content
+        const allDivs = element.querySelectorAll('div');
+        const tooltips: HTMLElement[] = [];
+        allDivs.forEach(div => {
+          if (div.textContent?.includes('Best trade') || div.textContent?.includes('Worst trade')) {
+            // Check if this div has positioning styles (is a tooltip)
+            const style = window.getComputedStyle(div);
+            if (style.position === 'absolute') {
+              tooltips.push(div as HTMLElement);
+            }
+          }
+        });
+        
+        // Need at least one tooltip (best or worst position might not exist)
+        if (tooltips.length > 0) {
+          // Check if they have actual positions set (not default/zero)
+          const firstTooltip = tooltips[0];
+          const rect = firstTooltip.getBoundingClientRect();
+          const hasPosition = rect.left > 0 && rect.top > 0;
+          if (hasPosition) {
+            break;
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 100));
+        tooltipCheckAttempts++;
+      }
+
+      // Extra wait for layout to settle after tooltips appear
+      await new Promise(resolve => setTimeout(resolve, 200));
+      await new Promise(resolve => requestAnimationFrame(resolve));
+
       // Ensure background image is loaded
       const bgStyle = window.getComputedStyle(element as HTMLElement);
       const bgImage = bgStyle.backgroundImage;
