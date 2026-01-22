@@ -28,15 +28,11 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
     setUploadError(null);
     setIsGenerating(false);
     setImageUrl(null);
-    // Wait for modal and ShareCardSummary to fully mount and render
-    // Increased timeout significantly to ensure everything is ready:
-    // - Modal DOM insertion
-    // - ShareCardSummary component mount
-    // - React state propagation
-    // - Initial render cycle
+    // Use the pre-rendered hidden element - it should already be ready
+    // Just need a small delay for modal to show, then capture immediately
     setTimeout(() => {
       generateImage();
-    }, 1200);
+    }, 100);
   };
 
   const handleBackgroundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,12 +95,13 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         setCustomBackground(fittedDataUrl);
         setUploadError(null);
         
-        // Regenerate the image with the new background - increased wait time for React to render
+        // Regenerate the image with the new background
+        // Hidden element will update automatically, just need a moment for React
         setTimeout(() => {
           setIsGenerating(true);
           setImageUrl(null);
           generateImage();
-        }, 300);
+        }, 200);
       };
 
       img.onerror = () => {
@@ -127,7 +124,7 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         setIsGenerating(true);
         setImageUrl(null);
         generateImage();
-      }, 300);
+      }, 200);
     }
   };
 
@@ -144,37 +141,21 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       await new Promise(resolve => requestAnimationFrame(resolve));
       
       // Wait for component to mount and be in DOM
-      let element = document.getElementById('share-card-summary');
-      let elementReady = false;
-      let mountAttempts = 0;
-      const maxMountAttempts = 15; // Wait up to 1.5 seconds for component to mount
+      // Use the pre-rendered hidden element (should already be ready)
+      let element = document.getElementById('share-card-summary-hidden');
       
-      while (!elementReady && mountAttempts < maxMountAttempts) {
+      // If hidden element not found, fall back to visible one (shouldn't happen)
+      if (!element) {
         element = document.getElementById('share-card-summary');
-        
-        if (element) {
-          // Check if element is actually rendered (has dimensions)
-          const rect = element.getBoundingClientRect();
-          if (rect.width > 0 && rect.height > 0) {
-            elementReady = true;
-            break;
-          }
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, 100));
-        mountAttempts++;
       }
       
       if (!element) {
-        throw new Error('Share card element not found after waiting');
+        throw new Error('Share card element not found');
       }
 
-      // Critical: Wait for background and all React state updates to be fully rendered
-      // Also wait for React to finish all state updates and re-renders
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      // Wait for React to complete any pending updates
-      await new Promise(resolve => requestAnimationFrame(resolve));
+      // Since we're using a pre-rendered element, we just need a small wait
+      // for any recent background changes to apply
+      await new Promise(resolve => setTimeout(resolve, 200));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Ensure background image is loaded
@@ -287,169 +268,32 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       }
       
       // Wait for images to be converted and DOM to update
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // Re-verify all images are loaded AFTER conversion
-      const imagesAfterConversion = element.querySelectorAll('img');
-      const imagePromisesAfter = Array.from(imagesAfterConversion).map((img) => {
-        if (img.complete && img.naturalWidth > 0) {
-          return Promise.resolve();
-        }
-        return new Promise<void>((resolve) => {
-          const timeout = setTimeout(() => resolve(), 2000);
-          img.onload = () => {
-            clearTimeout(timeout);
-            resolve();
-          };
-          img.onerror = () => {
-            clearTimeout(timeout);
-            resolve();
-          };
-        });
-      });
-      await Promise.all(imagePromisesAfter);
-      
-      // Wait for DOM to settle after image updates
-      await new Promise(resolve => setTimeout(resolve, 300));
-      await new Promise(resolve => requestAnimationFrame(resolve));
+      // Since element is pre-rendered, images should already be loaded
+      await new Promise(resolve => setTimeout(resolve, 200));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
-      // Ensure canvas is fully rendered and drawn
-      // Wait for canvas to exist, be drawn, and signal it's ready
-      let canvas = element.querySelector('canvas') as HTMLCanvasElement;
-      let canvasReady = false;
-      let attempts = 0;
-      const maxAttempts = 30; // Wait up to 3 seconds for canvas
-      
-      while (!canvasReady && attempts < maxAttempts) {
-        canvas = element.querySelector('canvas') as HTMLCanvasElement;
-        
-        if (canvas) {
-          // Check if canvas has the ready signal from ShareCardSummary
+      // Ensure canvas is ready (should already be ready since it's pre-rendered)
+      const canvas = element.querySelector('canvas') as HTMLCanvasElement;
+      if (canvas) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          // Quick check - canvas should already be ready, but verify
           const hasReadySignal = canvas.getAttribute('data-canvas-ready') === 'true';
-          
-          if (hasReadySignal) {
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              // Verify canvas dimensions are correct
-              if (canvas.width === 600 && canvas.height === 240) {
-                // Verify canvas actually has content by checking multiple points
-                // The graph line should be visible (non-transparent pixels)
-                let hasValidContent = false;
-                try {
-                  // Check multiple points along where the line should be
-                  const checkPoints = [
-                    [50, 120], // Left side
-                    [300, 120], // Middle
-                    [550, 120], // Right side
-                  ];
-                  
-                  let contentFound = 0;
-                  for (const [x, y] of checkPoints) {
-                    const imageData = ctx.getImageData(x, y, 1, 1);
-                    // Check if there's any non-transparent content (alpha > 0)
-                    if (imageData.data[3] > 0) {
-                      contentFound++;
-                    }
-                  }
-                  
-                  // If we found content in at least one point, canvas is drawn
-                  // (Some points might be transparent if line doesn't pass through them)
-                  hasValidContent = contentFound > 0;
-                } catch (e) {
-                  // If we can't read pixels, assume it's ready if signal is set
-                  hasValidContent = true;
-                }
-                
-                if (hasValidContent) {
-                  canvasReady = true;
-                  
-                  // Force canvas to flush by reading pixel data from multiple locations
-                  ctx.getImageData(0, 0, 1, 1);
-                  ctx.getImageData(canvas.width - 1, canvas.height - 1, 1, 1);
-                  ctx.getImageData(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1);
-                  
-                  // Ensure canvas is fully painted with multiple animation frames
-                  await new Promise(resolve => requestAnimationFrame(resolve));
-                  await new Promise(resolve => requestAnimationFrame(resolve));
-                  await new Promise(resolve => requestAnimationFrame(resolve));
-                  await new Promise(resolve => requestAnimationFrame(resolve));
-                  
-                  // Additional wait to ensure canvas rendering is complete
-                  await new Promise(resolve => setTimeout(resolve, 400));
-                  break;
-                }
-              }
-            }
+          if (hasReadySignal && canvas.width === 600 && canvas.height === 240) {
+            // Force canvas to flush
+            ctx.getImageData(0, 0, 1, 1);
+            await new Promise(resolve => requestAnimationFrame(resolve));
+          } else {
+            // If not ready, wait a bit (shouldn't happen with pre-rendered element)
+            await new Promise(resolve => setTimeout(resolve, 300));
+            await new Promise(resolve => requestAnimationFrame(resolve));
           }
         }
-        
-        // Wait a bit before checking again
-        await new Promise(resolve => setTimeout(resolve, 100));
-        attempts++;
-      }
-      
-      // If canvas still not ready, wait significantly more and proceed
-      if (!canvasReady) {
-        console.warn('[ShareButtonSummary] Canvas ready signal not received, waiting additional time...');
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        await new Promise(resolve => requestAnimationFrame(resolve));
-        await new Promise(resolve => requestAnimationFrame(resolve));
       }
 
-      // Final comprehensive readiness check before capture
-      // Ensure everything is stable: canvas, images, fonts, DOM
-      // Also check that dimensions are stable (no layout shifts)
-      let allReady = false;
-      let stableCount = 0;
-      const requiredStableChecks = 3; // Component must be stable for 3 consecutive checks
-      let finalAttempts = 0;
-      const maxFinalAttempts = 15;
-      let lastDimensions = { width: 0, height: 0 };
-      
-      while (stableCount < requiredStableChecks && finalAttempts < maxFinalAttempts) {
-        // Check canvas is ready
-        const canvas = element.querySelector('canvas') as HTMLCanvasElement;
-        const canvasReady = canvas && canvas.getAttribute('data-canvas-ready') === 'true';
-        
-        // Check all images are loaded
-        const allImages = element.querySelectorAll('img');
-        const imagesReady = Array.from(allImages).every(img => 
-          img.complete && img.naturalWidth > 0 && img.naturalHeight > 0
-        );
-        
-        // Check fonts are ready
-        const fontsReady = document.fonts.status === 'loaded' || document.fonts.status === 'loading';
-        
-        // Check element has dimensions and they're stable
-        const rect = element.getBoundingClientRect();
-        const currentDimensions = { width: rect.width, height: rect.height };
-        const hasDimensions = currentDimensions.width > 0 && currentDimensions.height > 0;
-        const dimensionsStable = 
-          currentDimensions.width === lastDimensions.width && 
-          currentDimensions.height === lastDimensions.height;
-        
-        if (canvasReady && imagesReady && fontsReady && hasDimensions && dimensionsStable) {
-          stableCount++;
-          if (stableCount >= requiredStableChecks) {
-            allReady = true;
-            break;
-          }
-        } else {
-          stableCount = 0; // Reset if not stable
-        }
-        
-        lastDimensions = currentDimensions;
-        await new Promise(resolve => setTimeout(resolve, 200));
-        finalAttempts++;
-      }
-      
-      // Final wait to ensure all rendering is complete and stable before capture
-      await new Promise(resolve => setTimeout(resolve, 600));
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      await new Promise(resolve => requestAnimationFrame(resolve));
-      await new Promise(resolve => requestAnimationFrame(resolve));
+      // Final quick check - pre-rendered element should already be ready
+      // Just ensure fonts are loaded
+      await document.fonts.ready;
       await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Generate image
@@ -549,6 +393,19 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
 
   return (
     <>
+      {/* Pre-render ShareCardSummary in the background (hidden) so it's always ready */}
+      <div style={{ position: 'absolute', left: '-9999px', top: '-9999px', visibility: 'hidden', pointerEvents: 'none' }}>
+        <ShareCardSummary
+          id="share-card-summary-hidden"
+          summary={summary}
+          positions={positions}
+          username={resolveResult?.username}
+          profileImage={resolveResult?.profileImage}
+          wallet={resolveResult?.userAddressUsed || wallet}
+          customBackground={customBackground}
+        />
+      </div>
+
       <div 
         onClick={handleShare}
         className="bg-hyper-panel border border-hyper-border rounded py-3 px-3 flex flex-col items-center justify-center h-full cursor-pointer hover:bg-hyper-panelHover transition-colors"
