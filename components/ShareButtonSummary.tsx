@@ -178,11 +178,12 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         await new Promise(resolve => requestAnimationFrame(resolve));
       }
 
-      // CRITICAL: Wait for tooltips to be positioned (they're in state)
-      // Check if the tooltip divs actually exist in the DOM with their calculated positions
-      let tooltipCheckAttempts = 0;
-      const maxTooltipAttempts = 20;
-      while (tooltipCheckAttempts < maxTooltipAttempts) {
+      // ALSO wait for tooltips to be ready
+      // Tooltips only render when tooltipsReady is true, so we need to wait for them to appear in DOM
+      let tooltipReadyAttempts = 0;
+      const maxTooltipAttempts = 30;
+      while (tooltipReadyAttempts < maxTooltipAttempts) {
+        // Check if tooltip divs exist in the DOM (they only render when tooltipsReady is true)
         // Find tooltips by their text content
         const allDivs = element.querySelectorAll('div');
         const tooltips: HTMLElement[] = [];
@@ -196,21 +197,22 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
           }
         });
         
-        // Need at least one tooltip (best or worst position might not exist)
+        // Tooltips are rendered when they exist in DOM
         if (tooltips.length > 0) {
           // Check if they have actual positions set (not default/zero)
           const firstTooltip = tooltips[0];
           const rect = firstTooltip.getBoundingClientRect();
           const hasPosition = rect.left > 0 && rect.top > 0;
           if (hasPosition) {
+            // Tooltips are rendered and positioned correctly
             break;
           }
         }
         await new Promise(resolve => setTimeout(resolve, 100));
-        tooltipCheckAttempts++;
+        tooltipReadyAttempts++;
       }
 
-      // Extra wait for layout to settle after tooltips appear
+      // Extra wait after tooltips appear to ensure they're painted
       await new Promise(resolve => setTimeout(resolve, 200));
       await new Promise(resolve => requestAnimationFrame(resolve));
 
