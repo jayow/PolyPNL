@@ -35,6 +35,363 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout:
 }
 
 /**
+ * Fetch username and profile details from Polymarket profile page
+ * @param address - Wallet address (can be EOA or proxy wallet)
+ * @returns Profile information including username
+ */
+export async function fetchPolymarketUsername(address: string): Promise<{
+  address: string;
+  username: string | null;
+  displayName: string | null;
+  profileUrl: string;
+  bio: string | null;
+  avatarUrl: string | null;
+}> {
+  const normalizedAddress = address.toLowerCase().trim();
+  const profileUrl = `https://polymarket.com/@${normalizedAddress}`;
+
+  try {
+    console.log(`[fetchPolymarketUsername] Fetching profile for: ${normalizedAddress}`);
+    
+    const response = await fetchWithTimeout(
+      profileUrl,
+      {
+        headers: {
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        redirect: 'follow',
+      },
+      15000
+    );
+
+    const html = await response.text();
+    
+    if (!response.ok) {
+      console.log(`[fetchPolymarketUsername] Profile page returned ${response.status}, but attempting to parse HTML anyway`);
+      // Continue to try parsing HTML even on error status - sometimes error pages still contain useful data
+    }
+    const finalUrl = response.url;
+
+    let username: string | null = null;
+    let displayName: string | null = null;
+    let bio: string | null = null;
+    let avatarUrl: string | null = null;
+
+    // Method 1: Check if URL was redirected to a username profile
+    const urlMatch = finalUrl.match(/polymarket\.com\/@([a-zA-Z0-9_-]+)/);
+    if (urlMatch && urlMatch[1] && urlMatch[1].toLowerCase() !== normalizedAddress) {
+      username = urlMatch[1];
+      console.log(`[fetchPolymarketUsername] Found username from URL redirect: ${username}`);
+    }
+
+    // Method 2: Extract from meta tags (Open Graph)
+    const ogTitleMatch = html.match(/property=["']og:title["']\s+content=["']([^"']+)["']/i);
+    const ogDescMatch = html.match(/property=["']og:description["']\s+content=["']([^"']+)["']/i);
+    const ogImageMatch = html.match(/property=["']og:image["']\s+content=["']([^"']+)["']/i);
+    
+    // Method 3: Extract from regular meta tags
+    const metaDescMatch = html.match(/name=["']description["']\s+content=["']([^"']+)["']/i);
+    const metaTitleMatch = html.match(/name=["']title["']\s+content=["']([^"']+)["']/i);
+    
+    // Method 4: Extract from page title
+    const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+
+    // Parse title/og:title for username (format: "@username - Polymarket" or "@username on Polymarket")
+    const titleText = ogTitleMatch?.[1] || metaTitleMatch?.[1] || titleMatch?.[1] || '';
+    
+    if (titleText) {
+      // Try to extract @username from title
+      const atUsernameMatch = titleText.match(/@([a-zA-Z0-9_-]+)/);
+      if (atUsernameMatch && atUsernameMatch[1]) {
+        if (!username) {
+          username = atUsernameMatch[1];
+          console.log(`[fetchPolymarketUsername] Found username from title: ${username}`);
+        }
+        
+        // Extract display name (everything before the @ or before " - Polymarket")
+        const displayNameMatch = titleText.match(/^([^@-]+?)(?:\s*[@-]|$)/);
+        if (displayNameMatch && displayNameMatch[1].trim()) {
+          displayName = displayNameMatch[1].trim();
+        }
+      } else if (titleText && !titleText.includes(normalizedAddress)) {
+        // If title doesn't contain the address, it might be a display name
+        displayName = titleText.replace(/\s*[-|]\s*Polymarket.*$/i, '').trim();
+      }
+    }
+
+    // Parse description for bio
+    const descText = ogDescMatch?.[1] || metaDescMatch?.[1] || '';
+    if (descText && descText.length > 0 && !descText.toLowerCase().includes('polymarket')) {
+      bio = descText;
+    }
+
+    // Method 5: Try to extract from Next.js data (if present in HTML)
+    // Polymarket uses Next.js, which often includes JSON data in <script> tags
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
+    if (nextDataMatch && nextDataMatch[1]) {
+      try {
+        const nextData = JSON.parse(nextDataMatch[1]);
+        
+        // Navigate through the Next.js data structure to find user info
+        const pageProps = nextData?.props?.pageProps;
+        const userData = pageProps?.user || pageProps?.profile || pageProps?.data?.user || pageProps?.account;
+        
+        // Also check buildId and other common locations
+        const allPossiblePaths = [
+          pageProps?.user,
+          pageProps?.profile,
+          pageProps?.data?.user,
+          pageProps?.account,
+          pageProps?.userProfile,
+          nextData?.query?.user,
+          nextData?.query?.profile,
+        ].filter(Boolean);
+        
+        // Search through all possible user data objects
+        for (const data of allPossiblePaths) {
+          if (data && typeof data === 'object') {
+            if (!username && data.username) {
+              username = data.username;
+              console.log(`[fetchPolymarketUsername] Found username from Next.js data: ${username}`);
+            }
+            if (!displayName && (data.displayName || data.name)) {
+              displayName = data.displayName || data.name;
+            }
+            if (!bio && data.bio) {
+              bio = data.bio;
+            }
+            // Look for avatar in various field names
+            const possibleAvatarFields = [
+              data.avatarUrl,
+              data.avatar,
+              data.image,
+              data.profileImage,
+              data.picture,
+              data.profilePicture,
+              data.photo,
+              data.profilePhoto,
+              data.avatarImage,
+            ].filter(Boolean);
+            
+            if (possibleAvatarFields.length > 0 && !possibleAvatarFields[0].includes('/api/og')) {
+              avatarUrl = possibleAvatarFields[0];
+              console.log(`[fetchPolymarketUsername] Found avatar from Next.js data: ${avatarUrl}`);
+              break;
+            }
+          }
+        }
+      } catch (parseError) {
+        console.log(`[fetchPolymarketUsername] Failed to parse Next.js data:`, parseError);
+      }
+    }
+
+    // Method 6: Look for profile image in HTML img tags (common patterns)
+    // Look for images with profile/avatar related classes or attributes
+    if (!avatarUrl || avatarUrl.includes('/api/og')) {
+      // Try to find img tags with profile-related patterns
+      const imgPatterns = [
+        /<img[^>]*class="[^"]*avatar[^"]*"[^>]*src=["']([^"']+)["']/i,
+        /<img[^>]*class="[^"]*profile[^"]*"[^>]*src=["']([^"']+)["']/i,
+        /<img[^>]*src=["']([^"']*avatar[^"']*)["']/i,
+        /<img[^>]*src=["']([^"']*profile[^"']*)["']/i,
+        /<img[^>]*alt=["'][^"']*profile[^"']*["'][^>]*src=["']([^"']+)["']/i,
+      ];
+      
+      for (const pattern of imgPatterns) {
+        const match = html.match(pattern);
+        if (match && match[1] && !match[1].includes('/api/og')) {
+          // Make sure it's a valid image URL
+          if (match[1].startsWith('http') || match[1].startsWith('/') || match[1].startsWith('data:')) {
+            avatarUrl = match[1].startsWith('http') ? match[1] : `https://polymarket.com${match[1]}`;
+            console.log(`[fetchPolymarketUsername] Found avatar from HTML img tag: ${avatarUrl}`);
+            break;
+          }
+        }
+      }
+    }
+
+    // Method 7: Try to construct profile picture URL from username
+    // Polymarket might have a standard URL pattern for profile pictures
+    if (!avatarUrl && username) {
+      // Try common profile picture URL patterns
+      const possibleUrls = [
+        `https://polymarket.com/api/user/${username}/avatar`,
+        `https://polymarket.com/api/users/${username}/avatar`,
+        `https://polymarket.com/api/profile/${username}/avatar`,
+        `https://polymarket.com/avatars/${username}.jpg`,
+        `https://polymarket.com/avatars/${username}.png`,
+        `https://polymarket-upload.s3.us-east-2.amazonaws.com/avatars/${username}.jpg`,
+        `https://polymarket-upload.s3.us-east-2.amazonaws.com/avatars/${username}.png`,
+      ];
+      
+      // We can't test all URLs here, so we'll skip this for now
+      // and rely on the API or OG image
+    }
+
+    // Method 8: Try to fetch actual profile image from OG endpoint
+    // The OG endpoint generates a composite image, but we can try to extract the profile picture
+    // Or use a standard profile picture URL pattern if we have the username
+    if (!avatarUrl && username) {
+      // Try common Polymarket profile picture URL patterns
+      const possibleProfileUrls = [
+        `https://polymarket.com/api/user/${username}/avatar`,
+        `https://polymarket.com/api/users/${username}/avatar`,
+        `https://polymarket.com/api/profile/${username}/avatar`,
+      ];
+      
+      // We can't test all URLs synchronously, so we'll skip direct URL construction
+      // and rely on the API or OG image
+    }
+
+    // Method 9: For now, skip OG composite images
+    // The OG API endpoint generates a full Open Graph card (1200x630), not just the profile picture
+    // We'll rely on the API's profileImage field which should contain the actual profile picture URL
+    // If the API doesn't provide it, we'll return null rather than showing the composite OG card
+    if (!avatarUrl && ogImageMatch?.[1]) {
+      const ogImageUrl = ogImageMatch[1].replace(/&amp;/g, '&');
+      if (ogImageUrl.includes('/api/og')) {
+        // This is a composite OG image card, not the actual profile picture
+        // Skip it - the API should provide the actual profileImage field
+        console.log(`[fetchPolymarketUsername] Skipping OG composite image (not actual profile picture)`);
+        avatarUrl = null;
+      } else {
+        // Non-OG image URL, use it
+        avatarUrl = ogImageUrl;
+        console.log(`[fetchPolymarketUsername] Using OG image: ${avatarUrl}`);
+      }
+    }
+
+    console.log(`[fetchPolymarketUsername] Results for ${normalizedAddress}:`, {
+      username,
+      displayName,
+      hasBio: !!bio,
+      hasAvatar: !!avatarUrl,
+    });
+
+    return {
+      address: normalizedAddress,
+      username,
+      displayName,
+      profileUrl: username ? `https://polymarket.com/@${username}` : profileUrl,
+      bio,
+      avatarUrl,
+    };
+  } catch (error) {
+    console.error(`[fetchPolymarketUsername] Error fetching profile for ${normalizedAddress}:`, error);
+    return {
+      address: normalizedAddress,
+      username: null,
+      displayName: null,
+      profileUrl,
+      bio: null,
+      avatarUrl: null,
+    };
+  }
+}
+
+/**
+ * Fetch profile image for a user by username or wallet address
+ * This handles the full flow: username -> wallet address -> profile image
+ */
+export async function fetchProfileImageByUsername(usernameOrAddress: string): Promise<string | null> {
+  try {
+    let walletAddress = usernameOrAddress.toLowerCase().trim();
+    
+    // If it doesn't look like a wallet address (0x...), treat it as username and fetch the page
+    if (!walletAddress.startsWith('0x') || walletAddress.length !== 42) {
+      console.log(`[fetchProfileImage] "${usernameOrAddress}" doesn't look like a wallet address, fetching profile page...`);
+      
+      const profileUrl = `https://polymarket.com/@${usernameOrAddress}`;
+      const pageResponse = await fetchWithTimeout(profileUrl, {
+        headers: {
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      }, 15000);
+      
+      if (!pageResponse.ok) {
+        console.error(`[fetchProfileImage] Profile page returned ${pageResponse.status}`);
+        return null;
+      }
+      
+      const html = await pageResponse.text();
+      
+      // Extract wallet address from Next.js data
+      const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
+      if (nextDataMatch && nextDataMatch[1]) {
+        try {
+          const nextData = JSON.parse(nextDataMatch[1]);
+          const pageProps = nextData?.props?.pageProps;
+          
+          // Try various locations for the wallet address
+          const possibleAddresses = [
+            pageProps?.address,
+            pageProps?.wallet,
+            pageProps?.user?.address,
+            pageProps?.user?.wallet,
+            pageProps?.profile?.address,
+            pageProps?.profile?.wallet,
+            pageProps?.profile?.proxyWallet,
+            pageProps?.account?.address,
+            pageProps?.data?.address,
+            pageProps?.data?.wallet,
+          ].filter(Boolean);
+          
+          if (possibleAddresses.length > 0) {
+            walletAddress = possibleAddresses[0].toLowerCase();
+            console.log(`[fetchProfileImage] Found wallet address from page: ${walletAddress}`);
+          } else {
+            console.error(`[fetchProfileImage] Could not find wallet address in Next.js data`);
+            console.log(`[fetchProfileImage] Available pageProps keys:`, Object.keys(pageProps || {}));
+            return null;
+          }
+        } catch (parseError) {
+          console.error(`[fetchProfileImage] Failed to parse Next.js data:`, parseError);
+          return null;
+        }
+      } else {
+        console.error(`[fetchProfileImage] Could not find Next.js data in page`);
+        return null;
+      }
+    }
+    
+    // Now fetch the profile image from API using wallet address
+    console.log(`[fetchProfileImage] Fetching profile image for wallet: ${walletAddress}`);
+    const apiUrl = `${GAMMA_API_BASE}/public-profile?address=${walletAddress}`;
+    
+    const apiResponse = await fetchWithTimeout(apiUrl, {
+      headers: {
+        'Accept': 'application/json',
+      },
+    }, 10000);
+    
+    if (!apiResponse.ok) {
+      console.error(`[fetchProfileImage] API returned ${apiResponse.status}`);
+      return null;
+    }
+    
+    const profileData = await apiResponse.json();
+    const profileImage = profileData.profileImage || null;
+    
+    if (profileImage) {
+      console.log(`[fetchProfileImage] Found profile image: ${profileImage}`);
+    } else {
+      console.log(`[fetchProfileImage] No profile image in API response`);
+      console.log(`[fetchProfileImage] API response keys:`, Object.keys(profileData));
+    }
+    
+    return profileImage;
+    
+  } catch (error) {
+    console.error(`[fetchProfileImage] Error:`, error);
+    return null;
+  }
+}
+
+/**
  * Resolve proxy wallet for a given wallet address
  */
 export async function resolveProxyWallet(wallet: string): Promise<{
@@ -42,19 +399,12 @@ export async function resolveProxyWallet(wallet: string): Promise<{
   userAddressUsed: string;
   proxyWalletFound: boolean;
   proxyWallet?: string;
+  username?: string | null;
+  profileImage?: string | null;
 }> {
   const normalizedWallet = wallet.toLowerCase().trim();
 
-  // Check cache
-  if (proxyWalletCache.has(normalizedWallet)) {
-    const proxyWallet = proxyWalletCache.get(normalizedWallet);
-    return {
-      inputWallet: wallet,
-      userAddressUsed: proxyWallet || normalizedWallet,
-      proxyWalletFound: !!proxyWallet,
-      proxyWallet: proxyWallet || undefined,
-    };
-  }
+  // Don't use cache - always fetch fresh profileImage from API
 
   // First, check if the input address already has closed positions
   // If it does, it's already a proxy wallet, use it directly
@@ -77,10 +427,13 @@ export async function resolveProxyWallet(wallet: string): Promise<{
         // Input address has closed positions, it's already a proxy wallet
         console.log(`[API] Input address already has closed positions, treating as proxy wallet: ${normalizedWallet}`);
         proxyWalletCache.set(normalizedWallet, null); // Cache that it's already a proxy
+        const profileData = await fetchPolymarketUsername(normalizedWallet);
         return {
           inputWallet: wallet,
           userAddressUsed: normalizedWallet,
           proxyWalletFound: false, // Not "found" because it was already the proxy
+          username: profileData.username,
+          profileImage: null,
         };
       }
     }
@@ -91,8 +444,10 @@ export async function resolveProxyWallet(wallet: string): Promise<{
 
   try {
     console.log(`[API] Resolving proxy wallet for: ${normalizedWallet}`);
+    // According to Polymarket docs: https://docs.polymarket.com/api-reference/profiles/get-public-profile-by-wallet-address
+    // The endpoint uses 'address' parameter and returns 'profileImage' field
     const response = await fetchWithTimeout(
-      `${GAMMA_API_BASE}/public-profile?wallet=${encodeURIComponent(normalizedWallet)}`,
+      `${GAMMA_API_BASE}/public-profile?address=${encodeURIComponent(normalizedWallet)}`,
       {
         headers: {
           'Accept': 'application/json',
@@ -101,14 +456,38 @@ export async function resolveProxyWallet(wallet: string): Promise<{
       10000 // 10 second timeout for proxy wallet resolution
     );
 
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => response.statusText);
-      let errorData;
+    // Extract profileImage from API response - parse response body first, regardless of status
+    let profileImageFromResponse: string | null = null;
+    let responseData: any = null;
+    
+    console.log(`[resolveProxyWallet] API call status: ${response.status} ${response.statusText}`);
+    console.log(`[resolveProxyWallet] response.ok:`, response.ok);
+    
+    try {
+      const responseText = await response.text();
+      console.log(`[resolveProxyWallet] Response text length:`, responseText.length);
+      console.log(`[resolveProxyWallet] Response text preview (first 200 chars):`, responseText.substring(0, 200));
+      
       try {
-        errorData = JSON.parse(errorText);
-      } catch {
-        errorData = { error: errorText };
+        responseData = JSON.parse(responseText);
+        console.log(`[resolveProxyWallet] Successfully parsed JSON`);
+        console.log(`[resolveProxyWallet] Response keys:`, Object.keys(responseData));
+        console.log(`[resolveProxyWallet] responseData.profileImage:`, responseData.profileImage);
+        console.log(`[resolveProxyWallet] Full responseData:`, JSON.stringify(responseData, null, 2));
+        // Directly extract profileImage from API response
+        profileImageFromResponse = responseData.profileImage ?? null;
+        console.log(`[resolveProxyWallet] Extracted profileImageFromResponse:`, profileImageFromResponse);
+      } catch (parseError) {
+        console.error(`[resolveProxyWallet] Failed to parse JSON:`, parseError);
+        responseData = { error: responseText };
       }
+    } catch (readError) {
+      console.error(`[resolveProxyWallet] Failed to read response text:`, readError);
+      responseData = { error: response.statusText };
+    }
+
+    if (!response.ok) {
+      const errorData = responseData || { error: response.statusText };
       
       // 422 (Invalid address) or 404 (Not found) are expected for some wallets
       // Try alternative method: fetch a trade to get proxyWallet from the trade data
@@ -137,11 +516,14 @@ export async function resolveProxyWallet(wallet: string): Promise<{
               if (proxyWallet !== normalizedWallet) {
                 console.log(`[API] Found proxy wallet via closed-positions API: ${proxyWallet}`);
                 proxyWalletCache.set(normalizedWallet, proxyWallet);
+                const profileData = await fetchPolymarketUsername(proxyWallet);
                 return {
                   inputWallet: wallet,
                   userAddressUsed: proxyWallet,
                   proxyWalletFound: true,
                   proxyWallet: proxyWallet,
+                  username: profileData.username,
+                  profileImage: profileImageFromResponse || null,
                 };
               }
             }
@@ -150,10 +532,13 @@ export async function resolveProxyWallet(wallet: string): Promise<{
             if (positions.length > 0) {
               console.log(`[API] Input wallet has closed positions, using as-is (may already be proxy wallet)`);
               proxyWalletCache.set(normalizedWallet, null);
+              const profileData = await fetchPolymarketUsername(normalizedWallet);
               return {
                 inputWallet: wallet,
                 userAddressUsed: normalizedWallet,
                 proxyWalletFound: false,
+                username: profileData.username,
+                profileImage: profileImageFromResponse || null,
               };
             }
           }
@@ -242,11 +627,14 @@ export async function resolveProxyWallet(wallet: string): Promise<{
                   const info = proxyWalletInfo.get(bestProxy)!;
                   console.log(`[API] Found proxy wallet via trades API and verified with closed-positions: ${bestProxy} (${maxClosedPositions} closed positions, ${info.count} trades)`);
                   proxyWalletCache.set(normalizedWallet, bestProxy);
+                  const profileData = await fetchPolymarketUsername(bestProxy);
                   return {
                     inputWallet: wallet,
                     userAddressUsed: bestProxy,
                     proxyWalletFound: true,
                     proxyWallet: bestProxy,
+                    username: profileData.username,
+                    profileImage: profileImageFromResponse || null,
                   };
                 }
                 
@@ -266,11 +654,14 @@ export async function resolveProxyWallet(wallet: string): Promise<{
                   const info = proxyWalletInfo.get(bestProxyByRecency)!;
                   console.log(`[API] Found proxy wallet via trades API (fallback to recency): ${bestProxyByRecency} (${info.count} trades, most recent: ${new Date(info.mostRecentTime * 1000).toISOString()})`);
                   proxyWalletCache.set(normalizedWallet, bestProxyByRecency);
+                  const profileData = await fetchPolymarketUsername(bestProxyByRecency);
                   return {
                     inputWallet: wallet,
                     userAddressUsed: bestProxyByRecency,
                     proxyWalletFound: true,
                     proxyWallet: bestProxyByRecency,
+                    username: profileData.username,
+                    profileImage: profileImageFromResponse || null,
                   };
                 }
               }
@@ -283,55 +674,117 @@ export async function resolveProxyWallet(wallet: string): Promise<{
         // If alternative method also failed, fall back to using input wallet directly
         console.log(`[API] Could not resolve proxy wallet, using input wallet directly`);
         proxyWalletCache.set(normalizedWallet, null);
+        const profileData = await fetchPolymarketUsername(normalizedWallet);
         return {
           inputWallet: wallet,
           userAddressUsed: normalizedWallet,
           proxyWalletFound: false,
+          username: profileData.username,
+          profileImage: profileImageFromResponse || null,
         };
       }
       
       console.error(`[API] Proxy wallet fetch failed: ${response.status} ${JSON.stringify(errorData)}`);
       // For other errors, still fall back to input wallet rather than throwing
       proxyWalletCache.set(normalizedWallet, null);
+      const profileData = await fetchPolymarketUsername(normalizedWallet);
       return {
         inputWallet: wallet,
         userAddressUsed: normalizedWallet,
         proxyWalletFound: false,
+        username: profileData.username,
+        profileImage: profileImageFromResponse || null,
       };
     }
 
-    const data: PolymarketPublicProfile = await response.json();
-    console.log(`[API] Proxy wallet response:`, { wallet: data.wallet, proxyWallet: data.proxyWallet });
+    // Success - API returned 200 OK, use already parsed response data
+    const data: any = responseData;
+    
+    // Extract profileImage directly from API response - the API clearly returns it
+    // The API returns: {"profileImage":"https://...", "name":"jayowtrades", ...}
+    // So data.profileImage should be there
+    const profileImage = data?.profileImage ?? profileImageFromResponse ?? null;
+    
+    // CRITICAL: If profileImage is null, log everything to debug
+    if (!profileImage) {
+      console.error(`[resolveProxyWallet] CRITICAL ERROR: profileImage is null!`);
+      console.error(`[resolveProxyWallet] response.ok:`, response.ok);
+      console.error(`[resolveProxyWallet] response.status:`, response.status);
+      console.error(`[resolveProxyWallet] data exists:`, !!data);
+      console.error(`[resolveProxyWallet] data.profileImage:`, data?.profileImage);
+      console.error(`[resolveProxyWallet] profileImageFromResponse:`, profileImageFromResponse);
+      console.error(`[resolveProxyWallet] Full data object:`, JSON.stringify(data, null, 2));
+    }
+    console.log(`[resolveProxyWallet] Success path - data.profileImage:`, data?.profileImage);
+    console.log(`[resolveProxyWallet] Success path - profileImageFromResponse:`, profileImageFromResponse);
+    console.log(`[resolveProxyWallet] Success path - final profileImage:`, profileImage);
+    const username = data.name || data.pseudonym || null;
     const proxyWallet = data.proxyWallet?.toLowerCase() || null;
     
-    // Cache result
     proxyWalletCache.set(normalizedWallet, proxyWallet);
-    
     const userAddress = proxyWallet || normalizedWallet;
+    
+    let htmlUsername = null;
+    if (!username) {
+      const profileData = await fetchPolymarketUsername(userAddress);
+      htmlUsername = profileData.username;
+    }
 
+    console.log(`[resolveProxyWallet] Final return - profileImage:`, profileImage);
     return {
       inputWallet: wallet,
       userAddressUsed: userAddress,
       proxyWalletFound: !!proxyWallet,
       proxyWallet: proxyWallet || undefined,
+      username: username || htmlUsername,
+      profileImage: profileImage,
     };
   } catch (error) {
     console.error('Error resolving proxy wallet:', error);
     // Fallback to input wallet on error
     proxyWalletCache.set(normalizedWallet, null);
+    const profileData = await fetchPolymarketUsername(normalizedWallet);
     return {
       inputWallet: wallet,
       userAddressUsed: normalizedWallet,
       proxyWalletFound: false,
+      username: profileData.username,
+      profileImage: null,
     };
   }
 }
 
 /**
- * Fetch user activity (simpler than trades API for getting first BUY timestamps)
- * Uses the activity API which can filter by type=TRADE and side=BUY
- * @see https://docs.polymarket.com/api-reference/core/get-user-activity
+ * Updated resolveProxyWallet function that uses the enhanced username fetching
  */
+export async function resolveProxyWalletWithUsername(wallet: string): Promise<{
+  inputWallet: string;
+  userAddressUsed: string;
+  proxyWalletFound: boolean;
+  proxyWallet?: string;
+  username?: string | null;
+  displayName?: string | null;
+  profileUrl?: string;
+  bio?: string | null;
+  profileImage?: string | null;
+}> {
+  // First, resolve the proxy wallet using existing logic
+  const proxyResult = await resolveProxyWallet(wallet);
+  
+  // Then fetch username for the final address
+  const addressToFetch = proxyResult.userAddressUsed;
+  const profileData = await fetchPolymarketUsername(addressToFetch);
+  
+  return {
+    ...proxyResult,
+    username: profileData.username,
+    displayName: profileData.displayName,
+    profileUrl: profileData.profileUrl,
+    bio: profileData.bio,
+    profileImage: proxyResult.profileImage,
+  };
+}
+
 export async function fetchUserActivity(
   userAddress: string,
   options: {
@@ -436,10 +889,6 @@ export async function fetchUserActivity(
   console.log(`[API] Total activities fetched: ${allActivities.length}`);
   return allActivities;
 }
-
-/**
- * Fetch all trades for a user with pagination
- */
 export async function fetchAllTrades(
   userAddress: string,
   startDate?: string,
@@ -603,10 +1052,6 @@ export async function fetchAllTrades(
 
   return allTrades;
 }
-
-/**
- * Normalize a Polymarket trade to our standard format
- */
 export function normalizeTrade(trade: PolymarketTrade, userAddress: string): NormalizedTrade {
   // Extract conditionId from various possible fields
   const conditionId = trade.conditionId || 
@@ -656,11 +1101,6 @@ export function normalizeTrade(trade: PolymarketTrade, userAddress: string): Nor
     icon: trade.icon,
   };
 }
-
-/**
- * Fetch market metadata for a conditionId/outcome
- * Uses caching to avoid repeated API calls
- */
 export async function fetchMarketMetadata(
   conditionId: string,
   outcome?: string,
@@ -1008,10 +1448,6 @@ export async function fetchMarketMetadata(
   marketMetadataCache.set(cacheKey, emptyMetadata);
   return emptyMetadata;
 }
-
-/**
- * Enrich trades with market metadata
- */
 export async function enrichTradesWithMetadata(trades: NormalizedTrade[]): Promise<NormalizedTrade[]> {
   // Group trades by conditionId to batch metadata fetching
   const conditionIds = new Set(trades.map(t => t.conditionId));
@@ -1046,12 +1482,6 @@ export async function enrichTradesWithMetadata(trades: NormalizedTrade[]): Promi
     return trade;
   });
 }
-
-/**
- * Fetch closed positions for a user using the Polymarket Data API v1 endpoint
- * This is more efficient than fetching all trades and computing PnL manually
- * @see https://docs.polymarket.com/api-reference/core/get-closed-positions-for-a-user
- */
 export async function fetchClosedPositions(
   userAddress: string,
   startDate?: string,
