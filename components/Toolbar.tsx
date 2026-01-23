@@ -41,7 +41,7 @@ export default function Toolbar({
             type="text"
             value={wallet}
             onChange={(e) => setWallet(e.target.value)}
-            placeholder="0x..."
+            placeholder="Wallet address or username"
             className="w-full px-2 py-1.5 bg-hyper-bg border border-hyper-border rounded text-xs text-hyper-textPrimary placeholder-hyper-textSecondary focus:outline-none focus:border-hyper-accent"
             required
             disabled={loading}

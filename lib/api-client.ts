@@ -393,6 +393,116 @@ export async function fetchProfileImageByUsername(usernameOrAddress: string): Pr
 }
 
 /**
+ * Resolve username to wallet address
+ * @param usernameOrAddress - Username (e.g., "username") or wallet address
+ * @returns Wallet address if username is resolved, or original input if it's already a wallet
+ */
+export async function resolveUsernameToWallet(usernameOrAddress: string): Promise<{
+  input: string;
+  walletAddress: string | null;
+  isUsername: boolean;
+}> {
+  const input = usernameOrAddress.trim();
+  
+  // Check if it's already a wallet address (starts with 0x and is 42 chars)
+  if (input.startsWith('0x') && input.length === 42) {
+    return {
+      input,
+      walletAddress: input.toLowerCase(),
+      isUsername: false,
+    };
+  }
+  
+  // Treat as username - fetch profile page to get wallet address
+  try {
+    console.log(`[resolveUsernameToWallet] Resolving username: ${input}`);
+    const profileUrl = `https://polymarket.com/@${input}`;
+    const pageResponse = await fetchWithTimeout(profileUrl, {
+      headers: {
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      redirect: 'follow',
+    }, 15000);
+    
+    if (!pageResponse.ok) {
+      console.error(`[resolveUsernameToWallet] Profile page returned ${pageResponse.status}`);
+      return {
+        input,
+        walletAddress: null,
+        isUsername: true,
+      };
+    }
+    
+    const html = await pageResponse.text();
+    
+    // Extract wallet address from Next.js data
+    const nextDataMatch = html.match(/<script id="__NEXT_DATA__"[^>]*>([^<]+)<\/script>/);
+    if (nextDataMatch && nextDataMatch[1]) {
+      try {
+        const nextData = JSON.parse(nextDataMatch[1]);
+        const pageProps = nextData?.props?.pageProps;
+        
+        // Try various locations for the wallet address
+        const possibleAddresses = [
+          pageProps?.address,
+          pageProps?.wallet,
+          pageProps?.user?.address,
+          pageProps?.user?.wallet,
+          pageProps?.profile?.address,
+          pageProps?.profile?.wallet,
+          pageProps?.profile?.proxyWallet,
+          pageProps?.account?.address,
+          pageProps?.data?.address,
+          pageProps?.data?.wallet,
+          nextData?.query?.address,
+          nextData?.query?.wallet,
+        ].filter(Boolean);
+        
+        if (possibleAddresses.length > 0) {
+          const walletAddress = possibleAddresses[0].toLowerCase();
+          console.log(`[resolveUsernameToWallet] Resolved username "${input}" to wallet: ${walletAddress}`);
+          return {
+            input,
+            walletAddress,
+            isUsername: true,
+          };
+        } else {
+          console.error(`[resolveUsernameToWallet] Could not find wallet address in Next.js data`);
+          return {
+            input,
+            walletAddress: null,
+            isUsername: true,
+          };
+        }
+      } catch (parseError) {
+        console.error(`[resolveUsernameToWallet] Failed to parse Next.js data:`, parseError);
+        return {
+          input,
+          walletAddress: null,
+          isUsername: true,
+        };
+      }
+    } else {
+      console.error(`[resolveUsernameToWallet] Could not find Next.js data in page`);
+      return {
+        input,
+        walletAddress: null,
+        isUsername: true,
+      };
+    }
+  } catch (error) {
+    console.error(`[resolveUsernameToWallet] Error:`, error);
+    return {
+      input,
+      walletAddress: null,
+      isUsername: true,
+    };
+  }
+}
+
+/**
  * Resolve proxy wallet for a given wallet address
  */
 export async function resolveProxyWallet(wallet: string): Promise<{

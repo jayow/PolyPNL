@@ -65,16 +65,8 @@ export default function Home() {
     e.preventDefault();
     
     if (!wallet.trim()) {
-      setError('Please enter a wallet address');
+      setError('Please enter a wallet address or username');
       return;
-    }
-
-    // Update URL with address parameter for shareable links
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      params.set('address', wallet.trim());
-      const newUrl = `${window.location.pathname}?${params.toString()}`;
-      window.history.pushState({}, '', newUrl);
     }
 
     setLoading(true);
@@ -85,8 +77,36 @@ export default function Home() {
     setSelectedPosition(null);
 
     try {
+      // Check if input is a username (not a wallet address) and resolve it
+      let walletAddress = wallet.trim();
+      const isWalletAddress = walletAddress.startsWith('0x') && walletAddress.length === 42;
+      
+      if (!isWalletAddress) {
+        // Try to resolve username to wallet address
+        const resolveResponse = await fetch(`/api/resolve-username?username=${encodeURIComponent(walletAddress)}`);
+        if (resolveResponse.ok) {
+          const resolveData = await resolveResponse.json();
+          if (resolveData.walletAddress) {
+            walletAddress = resolveData.walletAddress;
+            console.log(`[Frontend] Resolved username "${wallet.trim()}" to wallet: ${walletAddress}`);
+          } else {
+            throw new Error(`Could not find wallet address for username "${wallet.trim()}". Please check the username or use a wallet address.`);
+          }
+        } else {
+          throw new Error(`Failed to resolve username "${wallet.trim()}". Please check the username or use a wallet address.`);
+        }
+      }
+
+      // Update URL with address parameter for shareable links (use resolved wallet address)
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        params.set('address', walletAddress);
+        const newUrl = `${window.location.pathname}?${params.toString()}`;
+        window.history.pushState({}, '', newUrl);
+      }
+
       const params = new URLSearchParams({
-        wallet: wallet.trim(),
+        wallet: walletAddress,
       });
 
       const controller = new AbortController();
