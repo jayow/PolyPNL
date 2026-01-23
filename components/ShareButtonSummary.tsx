@@ -135,13 +135,9 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
 
       const blob = await response.blob();
       
-      // Verify it's an image
-      if (!blob.type.startsWith('image/')) {
-        setUploadError('URL does not point to an image');
-        return;
-      }
-
       // Convert blob to data URL and process like file upload
+      // We'll verify it's an image by trying to load it, not just checking blob.type
+      // (some servers return incorrect content-types like "binary/data" for images)
       const reader = new FileReader();
       reader.onload = (event) => {
         const dataUrl = event.target?.result as string;
@@ -149,6 +145,11 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         img.src = dataUrl;
 
         img.onload = () => {
+          // Successfully loaded as image - verify it has valid dimensions
+          if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+            setUploadError('URL does not point to a valid image');
+            return;
+          }
           const width = img.naturalWidth;
           const height = img.naturalHeight;
           const sourceRatio = width / height;
@@ -198,7 +199,12 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         };
 
         img.onerror = () => {
-          setUploadError('Failed to load image from URL. Please try again.');
+          // If blob type check failed, give a more specific error
+          if (!blob.type.startsWith('image/')) {
+            setUploadError('URL does not point to an image. The server returned: ' + (blob.type || 'unknown type'));
+          } else {
+            setUploadError('Failed to load image from URL. Please check the URL is valid.');
+          }
         };
       };
 
