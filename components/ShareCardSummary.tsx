@@ -428,7 +428,16 @@ export default function ShareCardSummary({
             {(username || wallet) ? (username || wallet || '').charAt(0).toUpperCase() : '?'}
           </div>
         )}
-        <div style={{ fontSize: '22px', fontWeight: '600', color: '#E6EDF6', textAlign: 'center' }}>
+        <div style={{ 
+          fontSize: '22px', 
+          fontWeight: '600', 
+          color: '#E6EDF6', 
+          textAlign: 'center',
+          maxWidth: '152px', // Container width (180px) - padding (14px * 2) = 152px
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}>
           {username || (wallet && wallet.length > 10 
             ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}`
             : wallet || 'User')
