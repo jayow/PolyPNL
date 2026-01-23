@@ -20,6 +20,7 @@ export default function ShareButton({ position, wallet, resolveResult }: ShareBu
   const [copySuccess, setCopySuccess] = useState(false);
   const [customBackground, setCustomBackground] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [backgroundUrl, setBackgroundUrl] = useState<string>('');
 
   const handleShare = () => {
     setShowModal(true);
@@ -110,9 +111,127 @@ export default function ShareButton({ position, wallet, resolveResult }: ShareBu
     reader.readAsDataURL(file);
   };
 
+  const handleBackgroundUrl = async () => {
+    if (!backgroundUrl.trim()) {
+      setUploadError('Please enter an image URL');
+      return;
+    }
+
+    // Validate URL format
+    try {
+      new URL(backgroundUrl.trim());
+    } catch {
+      setUploadError('Invalid URL format');
+      return;
+    }
+
+    setUploadError(null);
+    
+    try {
+      // Use image-proxy to fetch the image (handles CORS and security)
+      const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(backgroundUrl.trim())}`;
+      const response = await fetch(proxyUrl);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch image from URL');
+      }
+
+      const blob = await response.blob();
+      
+      // Convert blob to data URL and process like file upload
+      // We'll verify it's an image by trying to load it, not just checking blob.type
+      // (some servers return incorrect content-types like "binary/data" for images)
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        const img = new Image();
+        img.src = dataUrl;
+
+        img.onload = () => {
+          // Successfully loaded as image - verify it has valid dimensions
+          if (img.naturalWidth === 0 || img.naturalHeight === 0) {
+            setUploadError('URL does not point to a valid image');
+            return;
+          }
+
+          const width = img.naturalWidth;
+          const height = img.naturalHeight;
+          const sourceRatio = width / height;
+          const targetRatio = 16 / 9;
+
+          const targetWidth = SHARE_W;
+          const targetHeight = SHARE_H;
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext('2d');
+
+          if (!ctx) {
+            setUploadError('Failed to process image. Please try again.');
+            return;
+          }
+
+          let sourceX = 0;
+          let sourceY = 0;
+          let sourceWidth = width;
+          let sourceHeight = height;
+
+          if (sourceRatio > targetRatio) {
+            sourceWidth = height * targetRatio;
+            sourceX = (width - sourceWidth) / 2;
+          } else {
+            sourceHeight = width / targetRatio;
+            sourceY = (height - sourceHeight) / 2;
+          }
+
+          ctx.drawImage(
+            img,
+            sourceX, sourceY, sourceWidth, sourceHeight,
+            0, 0, targetWidth, targetHeight
+          );
+
+          const fittedDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+          
+          console.log('[ShareButton] Setting custom background from URL:', fittedDataUrl.substring(0, 50) + '...');
+          setCustomBackground(fittedDataUrl);
+          setUploadError(null);
+          setBackgroundUrl('');
+          
+          if (showModal && !isGenerating) {
+            setTimeout(() => {
+              setIsGenerating(true);
+              setImageUrl(null);
+              generateImage();
+            }, 100);
+          }
+        };
+
+        img.onerror = () => {
+          // If blob type check failed, give a more specific error
+          if (!blob.type.startsWith('image/')) {
+            setUploadError('URL does not point to an image. The server returned: ' + (blob.type || 'unknown type'));
+          } else {
+            setUploadError('Failed to load image from URL. Please check the URL is valid.');
+          }
+        };
+      };
+
+      reader.onerror = () => {
+        setUploadError('Failed to read image from URL. Please try again.');
+      };
+
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error('Error loading image from URL:', error);
+      setUploadError(error instanceof Error ? error.message : 'Failed to load image from URL');
+    }
+  };
+
   const handleRemoveBackground = () => {
     setCustomBackground(null);
     setUploadError(null);
+    setBackgroundUrl('');
     
     if (showModal && !isGenerating) {
       // Give React time to update ShareCard with null background
@@ -485,17 +604,48 @@ export default function ShareButton({ position, wallet, resolveResult }: ShareBu
                 )}
               </div>
               <div className="flex flex-col gap-2">
-                <label className="cursor-pointer">
+                <div className="flex gap-2">
+                  <label className="cursor-pointer">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleBackgroundUpload}
+                      className="hidden"
+                    />
+                    <span className="text-xs px-3 py-2 bg-hyper-panelHover hover:bg-hyper-border border border-hyper-border rounded text-hyper-textPrimary transition-colors inline-block">
+                      {customBackground ? 'Change Background' : 'Upload Background'}
+                    </span>
+                  </label>
+                  {customBackground && (
+                    <button
+                      onClick={handleRemoveBackground}
+                      className="text-xs px-3 py-2 bg-hyper-panelHover hover:bg-hyper-border border border-hyper-border rounded text-hyper-textPrimary transition-colors"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+                <div className="flex gap-2">
                   <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleBackgroundUpload}
-                    className="hidden"
+                    type="url"
+                    value={backgroundUrl}
+                    onChange={(e) => setBackgroundUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleBackgroundUrl();
+                      }
+                    }}
+                    placeholder="Or paste image URL here..."
+                    className="flex-1 px-3 py-2 bg-hyper-bg border border-hyper-border rounded text-xs text-hyper-textPrimary placeholder-hyper-textSecondary focus:outline-none focus:border-hyper-accent"
                   />
-                  <span className="text-xs px-3 py-2 bg-hyper-panelHover hover:bg-hyper-border border border-hyper-border rounded text-hyper-textPrimary transition-colors inline-block">
-                    {customBackground ? 'Change Background' : 'Upload Background'}
-                  </span>
-                </label>
+                  <button
+                    onClick={handleBackgroundUrl}
+                    className="text-xs px-3 py-2 bg-hyper-panelHover hover:bg-hyper-border border border-hyper-border rounded text-hyper-textPrimary transition-colors"
+                  >
+                    Load URL
+                  </button>
+                </div>
                 <p className="text-xs text-hyper-textSecondary">
                   Image will be automatically fitted to 16:9 ratio
                 </p>
