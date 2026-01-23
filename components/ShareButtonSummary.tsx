@@ -21,6 +21,7 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
   const [copySuccess, setCopySuccess] = useState(false);
   const [customBackground, setCustomBackground] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [backgroundUrl, setBackgroundUrl] = useState<string>('');
 
   const handleShare = () => {
     setShowModal(true);
@@ -107,9 +108,115 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
     reader.readAsDataURL(file);
   };
 
+  const handleBackgroundUrl = async () => {
+    if (!backgroundUrl.trim()) {
+      setUploadError('Please enter an image URL');
+      return;
+    }
+
+    // Validate URL format
+    try {
+      new URL(backgroundUrl.trim());
+    } catch {
+      setUploadError('Invalid URL format');
+      return;
+    }
+
+    setUploadError(null);
+    
+    try {
+      // Use image-proxy to fetch the image (handles CORS and security)
+      const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(backgroundUrl.trim())}`;
+      const response = await fetch(proxyUrl);
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch image from URL');
+      }
+
+      const blob = await response.blob();
+      
+      // Verify it's an image
+      if (!blob.type.startsWith('image/')) {
+        setUploadError('URL does not point to an image');
+        return;
+      }
+
+      // Convert blob to data URL and process like file upload
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const dataUrl = event.target?.result as string;
+        const img = new Image();
+        img.src = dataUrl;
+
+        img.onload = () => {
+          const width = img.naturalWidth;
+          const height = img.naturalHeight;
+          const sourceRatio = width / height;
+          const targetRatio = 16 / 9;
+
+          const targetWidth = SHARE_W;
+          const targetHeight = SHARE_H;
+
+          const canvas = document.createElement('canvas');
+          canvas.width = targetWidth;
+          canvas.height = targetHeight;
+          const ctx = canvas.getContext('2d');
+
+          if (!ctx) {
+            setUploadError('Failed to process image. Please try again.');
+            return;
+          }
+
+          let sourceX = 0;
+          let sourceY = 0;
+          let sourceWidth = width;
+          let sourceHeight = height;
+
+          if (sourceRatio > targetRatio) {
+            sourceWidth = height * targetRatio;
+            sourceX = (width - sourceWidth) / 2;
+          } else {
+            sourceHeight = width / targetRatio;
+            sourceY = (height - sourceHeight) / 2;
+          }
+
+          ctx.drawImage(
+            img,
+            sourceX, sourceY, sourceWidth, sourceHeight,
+            0, 0, targetWidth, targetHeight
+          );
+
+          const fittedDataUrl = canvas.toDataURL('image/jpeg', 0.9);
+          
+          console.log('[ShareButtonSummary] Setting custom background from URL:', fittedDataUrl.substring(0, 50) + '...');
+          setCustomBackground(fittedDataUrl);
+          setUploadError(null);
+          setBackgroundUrl('');
+          
+          // Background updated - user can click "Generate Image" when ready
+          setImageUrl(null);
+        };
+
+        img.onerror = () => {
+          setUploadError('Failed to load image from URL. Please try again.');
+        };
+      };
+
+      reader.onerror = () => {
+        setUploadError('Failed to read image from URL. Please try again.');
+      };
+
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error('Error loading image from URL:', error);
+      setUploadError(error instanceof Error ? error.message : 'Failed to load image from URL');
+    }
+  };
+
   const handleRemoveBackground = () => {
     setCustomBackground(null);
     setUploadError(null);
+    setBackgroundUrl('');
     setImageUrl(null);
   };
 
@@ -544,28 +651,51 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
                 <label className="block text-sm text-hyper-textSecondary mb-2">
                   Custom Background (16:9 ratio recommended)
                 </label>
-                <div className="flex gap-2">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleBackgroundUpload}
-                    className="hidden"
-                    id="background-upload-summary"
-                  />
-                  <label
-                    htmlFor="background-upload-summary"
-                    className="px-4 py-2 bg-hyper-panelHover border border-hyper-border rounded cursor-pointer hover:bg-hyper-panelHover/80 text-sm text-hyper-textPrimary"
-                  >
-                    Upload Background
-                  </label>
-                  {customBackground && (
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleBackgroundUpload}
+                      className="hidden"
+                      id="background-upload-summary"
+                    />
+                    <label
+                      htmlFor="background-upload-summary"
+                      className="px-4 py-2 bg-hyper-panelHover border border-hyper-border rounded cursor-pointer hover:bg-hyper-panelHover/80 text-sm text-hyper-textPrimary"
+                    >
+                      Upload Background
+                    </label>
+                    {customBackground && (
+                      <button
+                        onClick={handleRemoveBackground}
+                        className="px-4 py-2 bg-hyper-panelHover border border-hyper-border rounded hover:bg-hyper-panelHover/80 text-sm text-hyper-textPrimary"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      value={backgroundUrl}
+                      onChange={(e) => setBackgroundUrl(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleBackgroundUrl();
+                        }
+                      }}
+                      placeholder="Or paste image URL here..."
+                      className="flex-1 px-3 py-2 bg-hyper-panel border border-hyper-border rounded text-sm text-hyper-textPrimary placeholder-hyper-textSecondary focus:outline-none focus:border-hyper-accent"
+                    />
                     <button
-                      onClick={handleRemoveBackground}
+                      onClick={handleBackgroundUrl}
                       className="px-4 py-2 bg-hyper-panelHover border border-hyper-border rounded hover:bg-hyper-panelHover/80 text-sm text-hyper-textPrimary"
                     >
-                      Remove
+                      Load URL
                     </button>
-                  )}
+                  </div>
                 </div>
                 {uploadError && (
                   <div className="mt-2 text-sm text-hyper-negative">{uploadError}</div>
