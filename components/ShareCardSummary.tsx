@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { PositionSummary, ClosedPosition } from '@/types';
 import { SHARE_W, SHARE_H, SAFE_PAD } from './ShareCard';
 
@@ -25,23 +25,6 @@ function formatNumber(num: number, decimals: number = 2): string {
     return `${sign}${(absNum / 1000).toFixed(decimals)}K`;
   } else {
     return `${sign}${absNum.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
-  }
-}
-
-function formatDays(days: number): string {
-  if (days < 1) {
-    return `${Math.round(days * 24)} hour${Math.round(days * 24) !== 1 ? 's' : ''}`;
-  } else if (days < 7) {
-    return `${days.toFixed(1)} day${days !== 1 ? 's' : ''}`;
-  } else if (days < 30) {
-    const weeks = days / 7;
-    return `${weeks.toFixed(1)} week${weeks !== 1 ? 's' : ''}`;
-  } else if (days < 365) {
-    const months = days / 30;
-    return `${months.toFixed(1)} month${months !== 1 ? 's' : ''}`;
-  } else {
-    const years = days / 365;
-    return `${years.toFixed(1)} year${years !== 1 ? 's' : ''}`;
   }
 }
 
@@ -94,6 +77,12 @@ function drawLineGraph(
     ctx.moveTo(0, y);
     ctx.lineTo(width, y);
     ctx.stroke();
+    
+    // Draw dot in the middle
+    ctx.beginPath();
+    ctx.arc(width / 2, y, 3, 0, 2 * Math.PI);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fill();
     return;
   }
 
@@ -116,14 +105,10 @@ function drawLineGraph(
   ctx.lineWidth = 3;
   ctx.beginPath();
 
-  const pointCoords: Array<{ x: number; y: number; position?: ClosedPosition }> = [];
-
   dataPoints.forEach((point, index) => {
     const x = padding + (index / (dataPoints.length - 1)) * graphWidth;
     const normalizedPnL = (point.cumulativePnL - minPnL) / range;
     const y = padding + graphHeight - (normalizedPnL * graphHeight);
-
-    pointCoords.push({ x, y, position: point.position });
 
     if (index === 0) {
       ctx.moveTo(x, y);
@@ -136,23 +121,161 @@ function drawLineGraph(
 
   // Draw markers for best and worst positions
   if (bestPosition || worstPosition) {
-    pointCoords.forEach((coord) => {
-      if (coord.position) {
-        const isBest = bestPosition && coord.position === bestPosition;
-        const isWorst = worstPosition && coord.position === worstPosition;
+    dataPoints.forEach((point, index) => {
+      if (point.position) {
+        const isBest = bestPosition && point.position === bestPosition;
+        const isWorst = worstPosition && point.position === worstPosition;
         
         if (isBest || isWorst) {
+          const x = padding + (index / (dataPoints.length - 1)) * graphWidth;
+          const normalizedPnL = (point.cumulativePnL - minPnL) / range;
+          const y = padding + graphHeight - (normalizedPnL * graphHeight);
+          
           // Draw white circle marker
           ctx.beginPath();
-          ctx.arc(coord.x, coord.y, 3, 0, 2 * Math.PI);
+          ctx.arc(x, y, 3, 0, 2 * Math.PI);
           ctx.fillStyle = '#FFFFFF';
           ctx.fill();
         }
       }
     });
   }
+}
 
-  return pointCoords;
+// Calculate tooltip position - pure function, no side effects
+function calculateTooltipPosition(
+  position: ClosedPosition | undefined,
+  cumulativeData: Array<{ date: number; cumulativePnL: number; position?: ClosedPosition }>,
+  isBest: boolean
+): { x: number; y: number } | null {
+  if (!position || cumulativeData.length === 0) return null;
+  
+  const padding = 20;
+  const graphWidth = 600 - padding * 2;
+  const graphHeight = 240 - padding * 2;
+  const minPnL = Math.min(...cumulativeData.map(d => d.cumulativePnL), 0);
+  const maxPnL = Math.max(...cumulativeData.map(d => d.cumulativePnL), 0);
+  const range = maxPnL - minPnL || 1;
+
+  // Find the index of this position in cumulativeData
+  const index = cumulativeData.findIndex(point => point.position === position);
+  if (index === -1) return null;
+
+  const point = cumulativeData[index];
+  
+  // Handle single data point case
+  const pointX = cumulativeData.length === 1 
+    ? padding + graphWidth / 2 
+    : padding + (index / (cumulativeData.length - 1)) * graphWidth;
+  const normalizedPnL = (point.cumulativePnL - minPnL) / range;
+  const pointY = padding + graphHeight - (normalizedPnL * graphHeight);
+
+  // Tooltip dimensions
+  const tooltipWidth = 250;
+  const tooltipHeight = 80;
+  const tooltipOffset = 10;
+  
+  // Graph boundaries
+  const graphLeft = padding;
+  const graphRight = 600 - padding;
+  const graphTop = padding;
+  const graphBottom = 240 - padding;
+
+  let tooltipX = pointX;
+  let tooltipY = pointY;
+
+  // Horizontal placement - prefer right, fall back to left
+  if (pointX + tooltipOffset + tooltipWidth > graphRight) {
+    tooltipX = pointX - tooltipWidth - tooltipOffset;
+  } else {
+    tooltipX = pointX + tooltipOffset;
+  }
+
+  // Clamp to left edge
+  if (tooltipX < graphLeft) {
+    tooltipX = graphLeft;
+  }
+
+  // Vertical placement
+  if (isBest) {
+    // Best trade: prefer above the point
+    tooltipY = pointY - tooltipHeight - tooltipOffset;
+    if (tooltipY < 0) {
+      // Can't go above, try below
+      tooltipY = pointY + tooltipOffset;
+    }
+  } else {
+    // Worst trade: prefer below the point
+    tooltipY = pointY + tooltipOffset;
+    if (tooltipY + tooltipHeight > 240) {
+      // Can't go below, try above
+      tooltipY = pointY - tooltipHeight - tooltipOffset;
+    }
+  }
+
+  // Final clamp to stay within graph area (0-240 for the container)
+  tooltipY = Math.max(0, Math.min(tooltipY, 240 - tooltipHeight));
+
+  return { x: tooltipX, y: tooltipY };
+}
+
+// Avoid tooltip overlap
+function avoidOverlap(
+  bestPos: { x: number; y: number } | null,
+  worstPos: { x: number; y: number } | null
+): { best: { x: number; y: number } | null; worst: { x: number; y: number } | null } {
+  if (!bestPos || !worstPos) {
+    return { best: bestPos, worst: worstPos };
+  }
+
+  const tooltipWidth = 250;
+  const tooltipHeight = 80;
+  const minSpacing = 10;
+
+  // Check if tooltips overlap
+  const overlaps = !(
+    bestPos.x + tooltipWidth + minSpacing < worstPos.x ||
+    worstPos.x + tooltipWidth + minSpacing < bestPos.x ||
+    bestPos.y + tooltipHeight + minSpacing < worstPos.y ||
+    worstPos.y + tooltipHeight + minSpacing < bestPos.y
+  );
+
+  if (!overlaps) {
+    return { best: bestPos, worst: worstPos };
+  }
+
+  // They overlap - try to separate them
+  let newBestPos = { ...bestPos };
+  let newWorstPos = { ...worstPos };
+
+  // Strategy: Move the one that's lower down, or the one that's higher up
+  if (bestPos.y < worstPos.y) {
+    // Best is above worst - try moving worst further down
+    const newWorstY = bestPos.y + tooltipHeight + minSpacing;
+    if (newWorstY + tooltipHeight <= 240) {
+      newWorstPos.y = newWorstY;
+    } else {
+      // Can't move worst down, try moving best up
+      const newBestY = worstPos.y - tooltipHeight - minSpacing;
+      if (newBestY >= 0) {
+        newBestPos.y = newBestY;
+      }
+    }
+  } else {
+    // Worst is above best - try moving best further down
+    const newBestY = worstPos.y + tooltipHeight + minSpacing;
+    if (newBestY + tooltipHeight <= 240) {
+      newBestPos.y = newBestY;
+    } else {
+      // Can't move best down, try moving worst up
+      const newWorstY = bestPos.y - tooltipHeight - minSpacing;
+      if (newWorstY >= 0) {
+        newWorstPos.y = newWorstY;
+      }
+    }
+  }
+
+  return { best: newBestPos, worst: newWorstPos };
 }
 
 export default function ShareCardSummary({ 
@@ -166,173 +289,35 @@ export default function ShareCardSummary({
   id 
 }: ShareCardSummaryProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const cumulativeData = calculateCumulativePnL(positions);
+  
+  // Memoize cumulative data
+  const cumulativeData = useMemo(() => calculateCumulativePnL(positions), [positions]);
+  
   const topTags = summary.topTags && summary.topTags.length > 0 
     ? summary.topTags.slice(0, 3)
     : [];
 
   // Find best and worst positions
-  const bestPosition = positions.length > 0 
-    ? positions.reduce((best, pos) => pos.realizedPnL > best.realizedPnL ? pos : best)
-    : undefined;
-  const worstPosition = positions.length > 0 
-    ? positions.reduce((worst, pos) => pos.realizedPnL < worst.realizedPnL ? pos : worst)
-    : undefined;
+  const bestPosition = useMemo(() => 
+    positions.length > 0 
+      ? positions.reduce((best, pos) => pos.realizedPnL > best.realizedPnL ? pos : best)
+      : undefined,
+    [positions]
+  );
+  
+  const worstPosition = useMemo(() =>
+    positions.length > 0 
+      ? positions.reduce((worst, pos) => pos.realizedPnL < worst.realizedPnL ? pos : worst)
+      : undefined,
+    [positions]
+  );
 
-  // Use state for tooltip positions so they can be recalculated after canvas renders
-  const [bestTooltipPos, setBestTooltipPos] = useState<{ x: number; y: number; placement: 'right' | 'left' | 'top' | 'bottom' } | null>(null);
-  const [worstTooltipPos, setWorstTooltipPos] = useState<{ x: number; y: number; placement: 'right' | 'left' | 'top' | 'bottom' } | null>(null);
-  // Add a ready flag to ensure tooltips don't render until layout is stable
-  const [tooltipsReady, setTooltipsReady] = useState(false);
-
-  // Calculate tooltip positions for best and worst trades with edge awareness
-  const getTooltipPosition = (
-    position: ClosedPosition | undefined,
-    isBest: boolean
-  ): { x: number; y: number; placement: 'right' | 'left' | 'top' | 'bottom' } | null => {
-    if (!position || cumulativeData.length === 0) return null;
-    
-    const padding = 20;
-    const graphWidth = 600 - padding * 2;
-    const graphHeight = 240 - padding * 2;
-    const minPnL = Math.min(...cumulativeData.map(d => d.cumulativePnL), 0);
-    const maxPnL = Math.max(...cumulativeData.map(d => d.cumulativePnL), 0);
-    const range = maxPnL - minPnL || 1;
-
-    // Find the index of this position in cumulativeData
-    const index = cumulativeData.findIndex(point => point.position === position);
-    if (index === -1) return null;
-
-    const point = cumulativeData[index];
-    const pointX = padding + (index / (cumulativeData.length - 1)) * graphWidth;
-    const normalizedPnL = (point.cumulativePnL - minPnL) / range;
-    const pointY = padding + graphHeight - (normalizedPnL * graphHeight);
-
-    // Tooltip dimensions (approximate)
-    const tooltipWidth = 250; // maxWidth from style
-    const tooltipHeight = 80; // approximate height
-    const tooltipOffset = 10; // offset from point
-    
-    // Graph boundaries - tooltips are positioned relative to the graph container (600x240px)
-    // The graph container itself is positioned within the share card, but tooltip coordinates
-    // are relative to the container, so we work with 0-600 (width) and 0-240 (height)
-    const graphLeft = padding; // Left edge of actual graph area (relative to container)
-    const graphRight = 600 - padding; // Right edge of actual graph area (relative to container)
-    const graphTop = padding; // Top edge of actual graph area (relative to container)
-    const graphBottom = 240 - padding; // Bottom edge of actual graph area (relative to container)
-    // Stat cards start right after the graph, so tooltips must stay within 0-240px height
-
-    // Calculate potential tooltip positions
-    let tooltipX = pointX;
-    let tooltipY = pointY;
-    let placement: 'right' | 'left' | 'top' | 'bottom' = 'right';
-
-    // First, determine horizontal placement (left/right)
-    // Check right edge (tooltip would overflow right)
-    if (pointX + tooltipOffset + tooltipWidth > graphRight) {
-      // Position to the left of the point
-      tooltipX = pointX - tooltipWidth - tooltipOffset;
-      placement = 'left';
-    } else {
-      // Position to the right of the point
-      tooltipX = pointX + tooltipOffset;
-      placement = 'right';
-    }
-
-    // Check left edge (tooltip would overflow left)
-    if (tooltipX < graphLeft) {
-      // If we're on the left side, try positioning to the right
-      if (pointX + tooltipOffset + tooltipWidth <= graphRight) {
-        tooltipX = pointX + tooltipOffset;
-        placement = 'right';
-      } else {
-        // If right side also doesn't fit, center it on the point
-        tooltipX = pointX - tooltipWidth / 2;
-        placement = 'top';
-      }
-    }
-
-    // Then, determine vertical placement (top/bottom)
-    // CRITICAL: Check if tooltip would extend below the graph (overlapping stat cards)
-    // The graph container is 240px tall, so tooltips must stay within 0-240px
-    const tooltipBottomIfBelow = pointY + tooltipOffset + tooltipHeight;
-    const tooltipTopIfAbove = pointY - tooltipHeight - tooltipOffset;
-    const wouldOverlapBottom = tooltipBottomIfBelow > graphBottom; // Would extend into stat cards
-    const wouldOverlapTop = tooltipTopIfAbove < graphTop;
-    const wouldOverlapStatCards = tooltipBottomIfBelow > 240; // Absolute bottom of graph container
-    
-    if (isBest) {
-      // Best trade: prefer above the point
-      if (wouldOverlapStatCards || wouldOverlapBottom) {
-        // Must position above to avoid stat cards
-        tooltipY = pointY - tooltipHeight - tooltipOffset;
-        if (placement !== 'left' && placement !== 'right') {
-          placement = 'top';
-        }
-        // If above would also overflow top, try to fit it within bounds
-        if (tooltipY < graphTop) {
-          tooltipY = Math.max(graphTop, pointY - tooltipHeight);
-        }
-      } else if (wouldOverlapTop) {
-        // If above would overflow top, try below (but check it doesn't hit stat cards)
-        if (tooltipBottomIfBelow <= graphBottom) {
-          tooltipY = pointY + tooltipOffset;
-          if (placement !== 'left' && placement !== 'right') {
-            placement = 'bottom';
-          }
-        } else {
-          // Can't go below (hits stat cards), must go above even if it overflows slightly
-          tooltipY = pointY - tooltipHeight - tooltipOffset;
-          if (placement !== 'left' && placement !== 'right') {
-            placement = 'top';
-          }
-        }
-      } else {
-        tooltipY = pointY - tooltipHeight - tooltipOffset;
-      }
-    } else {
-      // Worst trade: prefer below the point, but MUST avoid stat cards
-      if (wouldOverlapStatCards || wouldOverlapBottom) {
-        // Position above the point to avoid stat cards
-        tooltipY = pointY - tooltipHeight - tooltipOffset;
-        if (placement !== 'left' && placement !== 'right') {
-          placement = 'top';
-        }
-        // If above would also overflow top, try to fit it within bounds
-        if (tooltipY < graphTop) {
-          tooltipY = Math.max(graphTop, pointY - tooltipHeight);
-        }
-      } else if (wouldOverlapTop) {
-        // Position below if it would overlap top (and we know it won't hit stat cards)
-        tooltipY = pointY + tooltipOffset;
-        if (placement !== 'left' && placement !== 'right') {
-          placement = 'bottom';
-        }
-      } else {
-        // Safe to position below
-        tooltipY = pointY + tooltipOffset;
-        if (placement !== 'left' && placement !== 'right') {
-          placement = 'bottom';
-        }
-      }
-    }
-
-    // Final safety check: ensure tooltip doesn't extend below graph container (240px)
-    if (tooltipY + tooltipHeight > 240) {
-      // Force above the point
-      tooltipY = pointY - tooltipHeight - tooltipOffset;
-      if (placement !== 'left' && placement !== 'right') {
-        placement = 'top';
-      }
-      // Clamp to top if needed
-      if (tooltipY < 0) {
-        tooltipY = 0;
-      }
-    }
-
-    return { x: tooltipX, y: tooltipY, placement };
-  };
-
+  // Calculate tooltip positions synchronously - no useEffect, no state
+  const tooltipPositions = useMemo(() => {
+    const bestPos = calculateTooltipPosition(bestPosition, cumulativeData, true);
+    const worstPos = calculateTooltipPosition(worstPosition, cumulativeData, false);
+    return avoidOverlap(bestPos, worstPos);
+  }, [cumulativeData, bestPosition, worstPosition]);
 
   // Calculate YES/NO stats
   const yesPositions = positions.filter(pos => pos.side === 'Long YES');
@@ -341,213 +326,21 @@ export default function ShareCardSummary({
   const yesPnL = yesPositions.reduce((sum, pos) => sum + pos.realizedPnL, 0);
   const yesWins = yesPositions.filter(pos => pos.realizedPnL > 0).length;
   const yesWinRate = yesPositions.length > 0 ? (yesWins / yesPositions.length) * 100 : 0;
-  const yesAvgPnL = yesPositions.length > 0 ? yesPnL / yesPositions.length : 0;
   const yesCount = yesPositions.length;
 
   const noPnL = noPositions.reduce((sum, pos) => sum + pos.realizedPnL, 0);
   const noWins = noPositions.filter(pos => pos.realizedPnL > 0).length;
   const noWinRate = noPositions.length > 0 ? (noWins / noPositions.length) * 100 : 0;
-  const noAvgPnL = noPositions.length > 0 ? noPnL / noPositions.length : 0;
   const noCount = noPositions.length;
 
   // Draw graph when component mounts or data changes
   useEffect(() => {
     if (canvasRef.current && cumulativeData.length > 0) {
-      // Reset tooltips ready flag when data changes
-      setTooltipsReady(false);
-      
       const canvas = canvasRef.current;
       drawLineGraph(canvas, cumulativeData, 600, 240, bestPosition, worstPosition);
-      
-      // Signal that canvas is ready
       canvas.setAttribute('data-canvas-ready', 'true');
-      
-      // CRITICAL: Force browser to complete layout before calculating tooltips
-      // Reading offsetHeight forces a layout calculation
-      const graphContainer = canvas.parentElement;
-      if (graphContainer) {
-        void graphContainer.offsetHeight; // Force layout
-        void graphContainer.getBoundingClientRect(); // Force paint
-      }
-      
-      // Small delay to ensure layout is complete
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          // NOW calculate tooltip positions after layout is stable
-            let bestPos = getTooltipPosition(bestPosition, true);
-            let worstPos = getTooltipPosition(worstPosition, false);
-        
-            // Apply overlap avoidance logic
-            if (bestPos && worstPos) {
-              const tooltipWidth = 250;
-              const tooltipHeight = 80;
-              const minSpacing = 10; // Minimum spacing between tooltips
-              
-              // Define tooltip rectangles
-              const bestRect = {
-                left: bestPos.x,
-                right: bestPos.x + tooltipWidth,
-                top: bestPos.y,
-                bottom: bestPos.y + tooltipHeight,
-              };
-              
-              const worstRect = {
-                left: worstPos.x,
-                right: worstPos.x + tooltipWidth,
-                top: worstPos.y,
-                bottom: worstPos.y + tooltipHeight,
-              };
-              
-              // Check if tooltips overlap or are too close
-              const overlaps = !(
-                bestRect.right + minSpacing < worstRect.left ||
-                worstRect.right + minSpacing < bestRect.left ||
-                bestRect.bottom + minSpacing < worstRect.top ||
-                worstRect.bottom + minSpacing < bestRect.top
-              );
-              
-              if (overlaps) {
-                // Find the points on the graph for both tooltips
-                const bestIndex = bestPosition ? cumulativeData.findIndex(point => point.position === bestPosition) : -1;
-                const worstIndex = worstPosition ? cumulativeData.findIndex(point => point.position === worstPosition) : -1;
-                
-                if (bestIndex !== -1 && worstIndex !== -1) {
-                  const padding = 20;
-                  const graphWidth = 600 - padding * 2;
-                  const graphHeight = 240 - padding * 2;
-                  const minPnL = Math.min(...cumulativeData.map(d => d.cumulativePnL), 0);
-                  const maxPnL = Math.max(...cumulativeData.map(d => d.cumulativePnL), 0);
-                  const range = maxPnL - minPnL || 1;
-                  
-                  const bestPointX = padding + (bestIndex / (cumulativeData.length - 1)) * graphWidth;
-                  const bestPointY = padding + graphHeight - ((cumulativeData[bestIndex].cumulativePnL - minPnL) / range) * graphHeight;
-                  
-                  const worstPointX = padding + (worstIndex / (cumulativeData.length - 1)) * graphWidth;
-                  const worstPointY = padding + graphHeight - ((cumulativeData[worstIndex].cumulativePnL - minPnL) / range) * graphHeight;
-                  
-                  // Strategy: Try to separate them vertically first, then horizontally if needed
-                  const verticalSeparation = Math.abs(bestPointY - worstPointY);
-                  const horizontalSeparation = Math.abs(bestPointX - worstPointX);
-                  
-                  // If points are close vertically, try to separate tooltips vertically
-                  if (verticalSeparation < tooltipHeight + minSpacing) {
-                    // Determine which point is higher on the graph
-                    const bestIsHigher = bestPointY < worstPointY;
-                    
-                    if (bestIsHigher) {
-                      // Best is higher, try to keep best above and move worst further down
-                      const newWorstY = bestRect.bottom + minSpacing;
-                      if (newWorstY + tooltipHeight <= 240) {
-                        worstPos = { ...worstPos, y: newWorstY };
-                      } else {
-                        // Can't move worst down, try moving best up
-                        const newBestY = worstRect.top - tooltipHeight - minSpacing;
-                        if (newBestY >= 0) {
-                          bestPos = { ...bestPos, y: newBestY };
-                        } else {
-                          // Both can't fit vertically, try horizontal separation
-                          if (bestPointX < worstPointX) {
-                            // Best is on left, worst is on right
-                            bestPos = { ...bestPos, x: Math.max(0, worstRect.left - tooltipWidth - minSpacing) };
-                          } else {
-                            // Worst is on left, best is on right
-                            worstPos = { ...worstPos, x: Math.max(0, bestRect.left - tooltipWidth - minSpacing) };
-                          }
-                        }
-                      }
-                    } else {
-                      // Worst is higher, try to keep worst above and move best further down
-                      const newBestY = worstRect.bottom + minSpacing;
-                      if (newBestY + tooltipHeight <= 240) {
-                        bestPos = { ...bestPos, y: newBestY };
-                      } else {
-                        // Can't move best down, try moving worst up
-                        const newWorstY = bestRect.top - tooltipHeight - minSpacing;
-                        if (newWorstY >= 0) {
-                          worstPos = { ...worstPos, y: newWorstY };
-                        } else {
-                          // Both can't fit vertically, try horizontal separation
-                          if (bestPointX < worstPointX) {
-                            // Best is on left, worst is on right
-                            bestPos = { ...bestPos, x: Math.max(0, worstRect.left - tooltipWidth - minSpacing) };
-                          } else {
-                            // Worst is on left, best is on right
-                            worstPos = { ...worstPos, x: Math.max(0, bestRect.left - tooltipWidth - minSpacing) };
-                          }
-                        }
-                      }
-                    }
-                  }
-                  
-                  // Re-check overlap after vertical adjustment
-                  const bestRectAfter = {
-                    left: bestPos.x,
-                    right: bestPos.x + tooltipWidth,
-                    top: bestPos.y,
-                    bottom: bestPos.y + tooltipHeight,
-                  };
-                  
-                  const worstRectAfter = {
-                    left: worstPos.x,
-                    right: worstPos.x + tooltipWidth,
-                    top: worstPos.y,
-                    bottom: worstPos.y + tooltipHeight,
-                  };
-                  
-                  const stillOverlaps = !(
-                    bestRectAfter.right + minSpacing < worstRectAfter.left ||
-                    worstRectAfter.right + minSpacing < bestRectAfter.left ||
-                    bestRectAfter.bottom + minSpacing < worstRectAfter.top ||
-                    worstRectAfter.bottom + minSpacing < bestRectAfter.top
-                  );
-                  
-                  // If still overlapping, try horizontal separation
-                  if (stillOverlaps && horizontalSeparation < tooltipWidth + minSpacing) {
-                    if (bestPointX < worstPointX) {
-                      // Best is on left, move best further left or worst further right
-                      const newBestX = worstRectAfter.left - tooltipWidth - minSpacing;
-                      if (newBestX >= 0) {
-                        bestPos = { ...bestPos, x: newBestX };
-                      } else {
-                        // Can't move best left, try moving worst right
-                        const newWorstX = bestRectAfter.right + minSpacing;
-                        if (newWorstX + tooltipWidth <= 600) {
-                          worstPos = { ...worstPos, x: newWorstX };
-                        }
-                      }
-                    } else {
-                      // Worst is on left, move worst further left or best further right
-                      const newWorstX = bestRectAfter.left - tooltipWidth - minSpacing;
-                      if (newWorstX >= 0) {
-                        worstPos = { ...worstPos, x: newWorstX };
-                      } else {
-                        // Can't move worst left, try moving best right
-                        const newBestX = worstRectAfter.right + minSpacing;
-                        if (newBestX + tooltipWidth <= 600) {
-                          bestPos = { ...bestPos, x: newBestX };
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-            
-            // Set tooltip positions in state
-            setBestTooltipPos(bestPos);
-            setWorstTooltipPos(worstPos);
-            
-            // THEN mark as ready - ensures tooltips don't render until layout is stable
-            setTooltipsReady(true);
-            
-            // Also dispatch a custom event for additional reliability
-            const event = new CustomEvent('canvasReady', { detail: { canvas } });
-            canvas.dispatchEvent(event);
-          });
-        });
     }
   }, [cumulativeData, bestPosition, worstPosition]);
-
 
   // Debug: log when customBackground changes
   useEffect(() => {
@@ -572,8 +365,6 @@ export default function ShareCardSummary({
         boxSizing: 'border-box',
         position: 'relative',
         overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
       }}
     >
       {/* Semi-transparent overlay */}
@@ -590,213 +381,197 @@ export default function ShareCardSummary({
         }}
       />
 
-      {/* Top Section: Profile Card (Left) + Branding (Right) */}
+      {/* Profile Card - Absolute positioned */}
       <div
         style={{
-          position: 'relative',
+          position: 'absolute',
+          top: `${SAFE_PAD}px`,
+          left: `${SAFE_PAD}px`,
           zIndex: 10,
+          backgroundColor: 'rgba(18, 26, 36, 0.8)',
+          borderRadius: '8px',
+          padding: '14px',
           display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          padding: `${SAFE_PAD}px`,
-          paddingBottom: '8px',
-          flexShrink: 0,
-          height: '120px', // Fixed height: 80px profile + 8px gap + 24px username + padding
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '11px',
+          width: '180px',
         }}
       >
-        {/* Profile Card - Left */}
-        <div
-          style={{
-            backgroundColor: 'rgba(18, 26, 36, 0.8)',
-            borderRadius: '8px',
-            padding: '14px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '11px',
-            width: '180px',
-          }}
-        >
-          {profileImage ? (
-            <img
-              src={profileImage.startsWith('http') ? `/api/image-proxy?url=${encodeURIComponent(profileImage)}` : profileImage}
-              alt={username || 'Profile'}
-              style={{
-                width: '126px',
-                height: '126px',
-                borderRadius: '6px',
-                objectFit: 'cover',
-              }}
-              crossOrigin="anonymous"
-            />
-          ) : (
-            <div
-              style={{
-                width: '126px',
-                height: '126px',
-                borderRadius: '6px',
-                backgroundColor: '#2E5CFF',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#FFFFFF',
-                fontSize: '50px',
-                fontWeight: '600',
-              }}
-            >
-              {(username || wallet) ? (username || wallet || '').charAt(0).toUpperCase() : '?'}
-            </div>
-          )}
-          <div style={{ fontSize: '22px', fontWeight: '600', color: '#E6EDF6', textAlign: 'center' }}>
-            {username || (wallet && wallet.length > 10 
-              ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}`
-              : wallet || 'User')
-            }
+        {profileImage ? (
+          <img
+            src={profileImage.startsWith('http') ? `/api/image-proxy?url=${encodeURIComponent(profileImage)}` : profileImage}
+            alt={username || 'Profile'}
+            style={{
+              width: '126px',
+              height: '126px',
+              borderRadius: '6px',
+              objectFit: 'cover',
+            }}
+            crossOrigin="anonymous"
+          />
+        ) : (
+          <div
+            style={{
+              width: '126px',
+              height: '126px',
+              borderRadius: '6px',
+              backgroundColor: '#2E5CFF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#FFFFFF',
+              fontSize: '50px',
+              fontWeight: '600',
+            }}
+          >
+            {(username || wallet) ? (username || wallet || '').charAt(0).toUpperCase() : '?'}
           </div>
-        </div>
-
-        {/* Branding - Right */}
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '2px',
-            textAlign: 'right',
-            fontSize: '11px',
-            color: '#E6EDF6',
-            fontWeight: '600',
-          }}
-        >
-          <div>Get your own PnL at polypnl.hanyon.app</div>
-          <div>Follow us on X @jayowtrades</div>
+        )}
+        <div style={{ fontSize: '22px', fontWeight: '600', color: '#E6EDF6', textAlign: 'center' }}>
+          {username || (wallet && wallet.length > 10 
+            ? `${wallet.slice(0, 6)}...${wallet.slice(-4)}`
+            : wallet || 'User')
+          }
         </div>
       </div>
 
-      {/* Main Graph Area with Stat Cards */}
+      {/* Branding - Absolute positioned top right */}
       <div
         style={{
-          position: 'relative',
+          position: 'absolute',
+          top: `${SAFE_PAD}px`,
+          right: `${SAFE_PAD}px`,
           zIndex: 10,
-          margin: `0 ${SAFE_PAD}px`,
-          marginBottom: '8px',
-          paddingBottom: '0px',
           display: 'flex',
           flexDirection: 'column',
-          gap: '4px',
-          flex: 1,
-          minHeight: 0,
-          justifyContent: 'flex-end',
+          gap: '2px',
+          textAlign: 'right',
+          fontSize: '11px',
+          color: '#E6EDF6',
+          fontWeight: '600',
         }}
       >
-        {/* Graph */}
-        <div
-          style={{
-            position: 'relative',
-            width: '600px',
-            height: '240px',
-            flexShrink: 0,
-            marginLeft: 'auto',
-          }}
-        >
-          <canvas
-            ref={canvasRef}
-            width={600}
-            height={240}
-            style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-          />
-          {/* Best Position Tooltip */}
-          {tooltipsReady && bestPosition && bestTooltipPos && (
-            <div
-              style={{
-                position: 'absolute',
-                left: `${bestTooltipPos.x}px`,
-                top: `${bestTooltipPos.y}px`,
-                backgroundColor: 'rgba(18, 26, 36, 0.4)',
-                borderRadius: '8px',
-                padding: '12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '4px',
-                zIndex: 1000,
-                pointerEvents: 'none',
-                maxWidth: '250px',
-              }}
-            >
-              <div style={{ fontSize: '9.6px', fontWeight: '600', color: '#8B949E' }}>
-                Best trade
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {bestPosition.icon && (
-                  <img
-                    src={bestPosition.icon.startsWith('http') ? `/api/image-proxy?url=${encodeURIComponent(bestPosition.icon)}` : bestPosition.icon}
-                    alt={bestPosition.marketTitle || 'Market'}
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '4px',
-                      objectFit: 'cover',
-                    }}
-                    crossOrigin="anonymous"
-                  />
-                )}
-                <div style={{ fontSize: '9.6px', fontWeight: '600', color: '#E6EDF6' }}>
-                  {bestPosition.marketTitle || bestPosition.eventTitle || 'Market'}
-                </div>
-              </div>
-            </div>
-          )}
-          {/* Worst Position Tooltip */}
-          {tooltipsReady && worstPosition && worstTooltipPos && (
-            <div
-              style={{
-                position: 'absolute',
-                left: `${worstTooltipPos.x}px`,
-                top: `${worstTooltipPos.y}px`,
-                backgroundColor: 'rgba(18, 26, 36, 0.4)',
-                borderRadius: '8px',
-                padding: '12px',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '4px',
-                zIndex: 1000,
-                pointerEvents: 'none',
-                maxWidth: '250px',
-              }}
-            >
-              <div style={{ fontSize: '9.6px', fontWeight: '600', color: '#8B949E' }}>
-                Worst trade
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                {worstPosition.icon && (
-                  <img
-                    src={worstPosition.icon.startsWith('http') ? `/api/image-proxy?url=${encodeURIComponent(worstPosition.icon)}` : worstPosition.icon}
-                    alt={worstPosition.marketTitle || 'Market'}
-                    style={{
-                      width: '32px',
-                      height: '32px',
-                      borderRadius: '4px',
-                      objectFit: 'cover',
-                    }}
-                    crossOrigin="anonymous"
-                  />
-                )}
-                <div style={{ fontSize: '9.6px', fontWeight: '600', color: '#E6EDF6' }}>
-                  {worstPosition.marketTitle || worstPosition.eventTitle || 'Market'}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <div>Get your own PnL at polypnl.hanyon.app</div>
+        <div>Follow us on X @jayowtrades</div>
+      </div>
 
-        {/* Bottom Section: Four Stat Cards */}
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr 1fr 1fr',
-            gap: '6px',
-            flexShrink: 0,
-          }}
-        >
+      {/* Graph Container - Absolute positioned */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '70px',
+          right: `${SAFE_PAD}px`,
+          zIndex: 10,
+          width: '600px',
+          height: '240px',
+        }}
+      >
+        <canvas
+          ref={canvasRef}
+          width={600}
+          height={240}
+          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+        />
+        
+        {/* Best Position Tooltip */}
+        {bestPosition && tooltipPositions.best && (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${tooltipPositions.best.x}px`,
+              top: `${tooltipPositions.best.y}px`,
+              backgroundColor: 'rgba(18, 26, 36, 0.4)',
+              borderRadius: '8px',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+              zIndex: 1000,
+              pointerEvents: 'none',
+              maxWidth: '250px',
+            }}
+          >
+            <div style={{ fontSize: '9.6px', fontWeight: '600', color: '#8B949E' }}>
+              Best trade
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {bestPosition.icon && (
+                <img
+                  src={bestPosition.icon.startsWith('http') ? `/api/image-proxy?url=${encodeURIComponent(bestPosition.icon)}` : bestPosition.icon}
+                  alt={bestPosition.marketTitle || 'Market'}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '4px',
+                    objectFit: 'cover',
+                  }}
+                  crossOrigin="anonymous"
+                />
+              )}
+              <div style={{ fontSize: '9.6px', fontWeight: '600', color: '#E6EDF6' }}>
+                {bestPosition.marketTitle || bestPosition.eventTitle || 'Market'}
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Worst Position Tooltip */}
+        {worstPosition && tooltipPositions.worst && (
+          <div
+            style={{
+              position: 'absolute',
+              left: `${tooltipPositions.worst.x}px`,
+              top: `${tooltipPositions.worst.y}px`,
+              backgroundColor: 'rgba(18, 26, 36, 0.4)',
+              borderRadius: '8px',
+              padding: '12px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+              zIndex: 1000,
+              pointerEvents: 'none',
+              maxWidth: '250px',
+            }}
+          >
+            <div style={{ fontSize: '9.6px', fontWeight: '600', color: '#8B949E' }}>
+              Worst trade
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {worstPosition.icon && (
+                <img
+                  src={worstPosition.icon.startsWith('http') ? `/api/image-proxy?url=${encodeURIComponent(worstPosition.icon)}` : worstPosition.icon}
+                  alt={worstPosition.marketTitle || 'Market'}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '4px',
+                    objectFit: 'cover',
+                  }}
+                  crossOrigin="anonymous"
+                />
+              )}
+              <div style={{ fontSize: '9.6px', fontWeight: '600', color: '#E6EDF6' }}>
+                {worstPosition.marketTitle || worstPosition.eventTitle || 'Market'}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom Section: Four Stat Cards - Absolute positioned */}
+      <div
+        style={{
+          position: 'absolute',
+          bottom: '16px',
+          left: `${SAFE_PAD}px`,
+          right: `${SAFE_PAD}px`,
+          zIndex: 10,
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr 1fr',
+          gap: '6px',
+        }}
+      >
         {/* Card 1: Total Realized PnL */}
         <div style={{
           borderRadius: '8px',
@@ -1034,7 +809,6 @@ export default function ShareCardSummary({
               </div>
             </div>
           </div>
-        </div>
         </div>
       </div>
     </div>
