@@ -445,7 +445,11 @@ export async function resolveUsernameToWallet(usernameOrAddress: string): Promis
         const pageProps = nextData?.props?.pageProps;
         
         // Try various locations for the wallet address
+        // Polymarket profile pages use: proxyAddress, baseAddress, primaryAddress
         const possibleAddresses = [
+          pageProps?.proxyAddress,
+          pageProps?.baseAddress,
+          pageProps?.primaryAddress,
           pageProps?.address,
           pageProps?.wallet,
           pageProps?.user?.address,
