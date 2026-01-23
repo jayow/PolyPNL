@@ -1486,7 +1486,7 @@ export async function fetchClosedPositions(
   userAddress: string,
   startDate?: string,
   endDate?: string,
-  limit: number = 1000
+  limit: number = 10000 // Increased default limit to capture more positions
 ): Promise<ClosedPosition[]> {
   const allPositions: ClosedPosition[] = [];
   let offset = 0;

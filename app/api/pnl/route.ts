@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
         userAddress,
         undefined, // No start date - get entire history
         undefined, // No end date - get entire history
-        1000 // Limit to 1000 positions max
+        10000 // Increased limit to 10000 positions to capture all positions including high-value wins
       );
       console.log(`[API /pnl] Fetched ${closedPositions.length} closed positions from API`);
       
