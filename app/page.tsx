@@ -26,6 +26,40 @@ export default function Home() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [selectedPosition, setSelectedPosition] = useState<ClosedPosition | null>(null);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [autoSubmitAddress, setAutoSubmitAddress] = useState<string | null>(null);
+
+  // Read address parameter from URL on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const addressParam = params.get('address');
+      
+      if (addressParam) {
+        const decodedAddress = decodeURIComponent(addressParam).trim();
+        setWallet(decodedAddress);
+        // Set flag to auto-submit after component is ready
+        setAutoSubmitAddress(decodedAddress);
+      }
+    }
+  }, []); // Only run on mount
+
+  // Auto-submit when address is loaded from URL
+  useEffect(() => {
+    if (autoSubmitAddress && wallet === autoSubmitAddress && !loading) {
+      // Small delay to ensure everything is ready
+      const timer = setTimeout(() => {
+        // Create a synthetic form event to trigger submit
+        const form = document.querySelector('form');
+        if (form) {
+          const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+          form.dispatchEvent(submitEvent);
+        }
+        setAutoSubmitAddress(null); // Clear flag after triggering
+      }, 200);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [autoSubmitAddress, wallet, loading]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +67,14 @@ export default function Home() {
     if (!wallet.trim()) {
       setError('Please enter a wallet address');
       return;
+    }
+
+    // Update URL with address parameter for shareable links
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      params.set('address', wallet.trim());
+      const newUrl = `${window.location.pathname}?${params.toString()}`;
+      window.history.pushState({}, '', newUrl);
     }
 
     setLoading(true);
