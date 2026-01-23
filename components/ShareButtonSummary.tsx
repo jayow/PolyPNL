@@ -277,7 +277,9 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       await new Promise(resolve => requestAnimationFrame(resolve));
 
       // Convert external images to base64 via proxy
+      // CRITICAL: Convert in parallel but wait for each to fully load after conversion
       const imageElements = Array.from(element.querySelectorAll('img')) as HTMLImageElement[];
+      const imageConversionPromises: Promise<void>[] = [];
       
       for (const img of imageElements) {
         if (img.style.display === 'none' || !img.complete || img.naturalWidth === 0) {
@@ -300,35 +302,79 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
         }
         
         // Convert all external images (including proxied ones) to base64
-        try {
-          let fetchUrl = originalSrc;
-          
-          // If it's already a proxy URL, use it directly; otherwise, create a proxy URL
-          if (!originalSrc.includes('/api/image-proxy')) {
-            fetchUrl = `/api/image-proxy?url=${encodeURIComponent(originalSrc)}`;
+        const conversionPromise = (async () => {
+          try {
+            let fetchUrl = originalSrc;
+            
+            // If it's already a proxy URL, use it directly; otherwise, create a proxy URL
+            if (!originalSrc.includes('/api/image-proxy')) {
+              fetchUrl = `/api/image-proxy?url=${encodeURIComponent(originalSrc)}`;
+            }
+            
+            const response = await fetch(fetchUrl);
+            
+            if (response.ok) {
+              const blob = await response.blob();
+              const reader = new FileReader();
+              const base64 = await new Promise<string>((resolve, reject) => {
+                reader.onloadend = () => resolve(reader.result as string);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+              });
+              
+              // Set base64 and wait for image to load
+              await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                  reject(new Error('Image load timeout'));
+                }, 5000);
+                
+                img.onload = () => {
+                  clearTimeout(timeout);
+                  // Verify image actually loaded
+                  if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0) {
+                    resolve();
+                  } else {
+                    reject(new Error('Image loaded but invalid dimensions'));
+                  }
+                };
+                
+                img.onerror = () => {
+                  clearTimeout(timeout);
+                  reject(new Error('Image failed to load'));
+                };
+                
+                img.src = base64;
+              });
+            }
+          } catch (e) {
+            console.warn('Failed to convert image to base64:', originalSrc, e);
+            // Don't throw - continue with other images
           }
-          
-          const response = await fetch(fetchUrl);
-          
-          if (response.ok) {
-            const blob = await response.blob();
-            const reader = new FileReader();
-            const base64 = await new Promise<string>((resolve, reject) => {
-              reader.onloadend = () => resolve(reader.result as string);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-            img.src = base64;
-          }
-        } catch (e) {
-          console.warn('Failed to convert image to base64:', originalSrc);
-        }
+        })();
+        
+        imageConversionPromises.push(conversionPromise);
       }
       
-      // Wait for images to be converted and DOM to update
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Wait for ALL images to be converted and loaded
+      await Promise.all(imageConversionPromises);
+      
+      // Extra wait to ensure all images are fully rendered in DOM
+      await new Promise(resolve => setTimeout(resolve, 500));
       await new Promise(resolve => requestAnimationFrame(resolve));
       await new Promise(resolve => requestAnimationFrame(resolve));
+      
+      // Final verification: Check all images are loaded
+      const allImages = element.querySelectorAll('img');
+      const allLoaded = Array.from(allImages).every(img => {
+        if (img.style.display === 'none') return true;
+        return img.complete && img.naturalWidth > 0 && img.naturalHeight > 0;
+      });
+      
+      if (!allLoaded) {
+        console.warn('Some images may not be fully loaded before capture');
+        // Wait a bit more
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
 
       // Final canvas validation before generating image
       const finalCanvas = element.querySelector('canvas') as HTMLCanvasElement;
@@ -352,7 +398,7 @@ export default function ShareButtonSummary({ summary, positions, wallet, resolve
       await document.fonts.ready;
       await new Promise(resolve => requestAnimationFrame(resolve));
 
-      // Generate image
+      // Generate image with enhanced options for better image capture
       const dataUrl = await toPng(element as HTMLElement, {
         backgroundColor: '#0B0F14',
         pixelRatio: 2,
