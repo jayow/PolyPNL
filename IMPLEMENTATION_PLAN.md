@@ -28,9 +28,12 @@ npm install --save-dev @types/node
 ```
 
 **Self-Check:**
-- [ ] Verify `package.json` includes all dependencies
-- [ ] Run `npm install` successfully
-- [ ] No dependency conflicts
+- [x] Verify `package.json` includes all dependencies
+- [x] Run `npm install` successfully
+- [x] No dependency conflicts
+
+**Status:** ✅ COMPLETED
+- Dependencies installed: `zod@^4.3.6`, `@upstash/ratelimit@^2.0.8`, `@upstash/redis@^1.36.1`
 
 #### 1.2 Create Validation Utilities
 **File:** `lib/validation.ts`
@@ -42,9 +45,19 @@ Create shared Zod schemas:
 - `screenshotRequestSchema` - Validates screenshot API requests
 
 **Self-Check:**
-- [ ] All schemas properly defined
-- [ ] Error messages are user-friendly
-- [ ] Schemas handle edge cases (empty strings, null, undefined)
+- [x] All schemas properly defined
+- [x] Error messages are user-friendly
+- [x] Schemas handle edge cases (empty strings, null, undefined)
+
+**Status:** ✅ COMPLETED
+- Created `lib/validation.ts` with all required schemas:
+  - `walletAddressSchema` - Validates 0x + 40 hex chars
+  - `usernameSchema` - Validates alphanumeric, underscore, hyphen, 1-50 chars
+  - `urlSchema` and `createUrlSchema` - URL validation with optional domain allowlist
+  - `screenshotRequestSchema` - HTML (max 500KB), width/height (100-5000px)
+  - `pnlQuerySchema` - Wallet/username + method validation
+  - `activitiesQuerySchema`, `tradesQuerySchema`, `resolveQuerySchema`, `resolveUsernameQuerySchema`, `imageProxyQuerySchema`
+  - Helper functions: `validateQueryParams`, `validateRequestBody`
 
 #### 1.3 Create Rate Limiting Utility
 **File:** `lib/rate-limit.ts`
@@ -55,9 +68,17 @@ Set up rate limiting using Upstash:
 - Error handling for rate limit exceeded
 
 **Self-Check:**
-- [ ] Rate limiter initializes correctly
-- [ ] Can test rate limiting locally
-- [ ] Error messages are clear
+- [x] Rate limiter initializes correctly
+- [x] Can test rate limiting locally
+- [x] Error messages are clear
+
+**Status:** ✅ COMPLETED
+- Created `lib/rate-limit.ts` with:
+  - Rate limiters for each endpoint type (pnl: 10/min, screenshot: 5/min, image-proxy: 20/min, resolve-username: 15/min, default: 30/min)
+  - `getClientIP` function to extract IP from headers
+  - `checkRateLimit` function with fallback for missing Redis (dev mode)
+  - `createRateLimitResponse` helper for 429 responses
+  - Graceful degradation when Redis not configured
 
 ---
 
@@ -702,7 +723,7 @@ if (!success) {
 
 ### Phase Completion Checklist
 
-- [ ] Phase 1: Foundation - Add Zod & Dependencies
+- [x] Phase 1: Foundation - Add Zod & Dependencies ✅ **COMPLETED**
 - [ ] Phase 2: Input Validation - Add Zod to All API Routes
 - [ ] Phase 3: Rate Limiting Implementation
 - [ ] Phase 4: Image Proxy Security Hardening

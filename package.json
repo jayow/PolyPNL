@@ -11,13 +11,16 @@
     "test:watch": "jest --watch"
   },
   "dependencies": {
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.36.1",
     "@vercel/analytics": "^1.6.1",
     "html-to-image": "^1.11.13",
     "next": "^14.2.0",
     "puppeteer": "^24.35.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "recharts": "^2.15.4"
+    "recharts": "^2.15.4",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.1.5",
