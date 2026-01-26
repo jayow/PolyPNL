@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     if (!result.walletAddress) {
       return NextResponse.json(
-        { error: `Could not resolve username "${username}" to a wallet address` },
+        { error: `Could not resolve username "${validatedParams.username}" to a wallet address` },
         { status: 404 }
       );
     }
