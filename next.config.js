@@ -17,6 +17,8 @@ const nextConfig = {
       bodySizeLimit: '2mb',
     },
   },
+  // Exclude Puppeteer from server bundle (causes build-time issues)
+  serverExternalPackages: ['puppeteer', 'puppeteer-core'],
 }
 
 module.exports = nextConfig

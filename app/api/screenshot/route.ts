@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import DOMPurify from 'isomorphic-dompurify';
 import { screenshotRequestSchema, validateRequestBody } from '@/lib/validation';
 import { screenshotRateLimiter, getClientIP, checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 import { puppeteerQueue } from '@/lib/puppeteer-queue';
+import { loadPuppeteer } from '@/lib/puppeteer-loader';
 
 /**
  * Server-side screenshot API using Puppeteer
@@ -14,7 +15,21 @@ import { puppeteerQueue } from '@/lib/puppeteer-queue';
 // Use Node.js runtime for Puppeteer (required for file system access)
 export const runtime = 'nodejs';
 
+// Prevent execution during build - this route should not be analyzed at build time
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export async function POST(request: NextRequest) {
+  // Skip during build - Next.js tries to analyze routes during build
+  // Puppeteer causes issues because it tries to access browser files
+  if (process.env.NEXT_PHASE === 'phase-production-build' || process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+    // During build, return a simple response to prevent Puppeteer from being analyzed
+    return NextResponse.json({ 
+      error: 'Screenshot service is only available in production runtime',
+      code: 'BUILD_TIME_SKIP'
+    }, { status: 503 });
+  }
+  
   try {
     // Check rate limit
     const ip = getClientIP(request);
@@ -77,10 +92,10 @@ export async function POST(request: NextRequest) {
 
     console.log('[Screenshot API] HTML length:', html.length, 'Sanitized length:', sanitizedHtml.length, 'Width:', width, 'Height:', height);
 
-    // Dynamic import of puppeteer (only load when needed)
+    // Load Puppeteer using lazy loader (prevents build-time issues)
     let puppeteer;
     try {
-      puppeteer = await import('puppeteer');
+      puppeteer = await loadPuppeteer();
       console.log('[Screenshot API] Puppeteer imported successfully');
     } catch (importError) {
       console.error('[Screenshot API] Failed to import puppeteer:', importError);

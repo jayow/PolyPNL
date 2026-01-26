@@ -170,7 +170,7 @@ export function validateQueryParams<T extends z.ZodTypeAny>(
   
   if (!result.success) {
     throw new Error(
-      `Validation failed: ${result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`
+      `Validation failed: ${result.error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`
     );
   }
   
@@ -188,7 +188,7 @@ export function validateRequestBody<T extends z.ZodTypeAny>(
   
   if (!result.success) {
     throw new Error(
-      `Validation failed: ${result.error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`
+      `Validation failed: ${result.error.issues.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`
     );
   }
   
