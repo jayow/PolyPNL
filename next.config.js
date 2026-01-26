@@ -19,6 +19,14 @@ const nextConfig = {
   },
   // Exclude Puppeteer from server bundle (causes build-time issues)
   serverExternalPackages: ['puppeteer', 'puppeteer-core'],
+  // Exclude Puppeteer browser files from build tracing
+  outputFileTracingExcludes: {
+    '*': [
+      '**/node_modules/puppeteer/**',
+      '**/node_modules/@puppeteer/**',
+      '**/.cache/puppeteer/**',
+    ],
+  },
 }
 
 module.exports = nextConfig
