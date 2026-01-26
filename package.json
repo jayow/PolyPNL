@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "test:stress": "tsx scripts/stress-test.ts"
   },
   "dependencies": {
     "@upstash/ratelimit": "^2.0.8",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.1.5",
+    "@testing-library/react": "^14.1.2",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.11.0",
     "@types/react": "^18.3.0",
@@ -37,6 +39,7 @@
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "ts-jest": "^29.1.2",
+    "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   }
 }
