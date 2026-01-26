@@ -127,6 +127,29 @@ Computes realized PnL for a wallet.
 }
 ```
 
+## Security
+
+This application implements comprehensive security measures:
+
+- **Input Validation**: All API inputs validated using Zod schemas
+- **Rate Limiting**: Per-endpoint rate limits to prevent abuse
+- **HTML Sanitization**: All HTML content sanitized to prevent XSS
+- **Domain Restrictions**: Image proxy restricted to allowed domains
+- **Secure Logging**: Sensitive data automatically redacted from logs
+- **Error Handling**: Generic error messages, detailed logs server-side only
+
+See [SECURITY.md](./SECURITY.md) for detailed security documentation.
+
+### Environment Variables
+
+For production deployment, configure:
+
+```bash
+UPSTASH_REDIS_REST_URL=your_redis_url
+UPSTASH_REDIS_REST_TOKEN=your_redis_token
+ALLOWED_ORIGIN=https://yourdomain.com
+```
+
 ## External APIs Used
 
 - **Gamma API** (`https://gamma-api.polymarket.com`): Proxy wallet resolution and market metadata

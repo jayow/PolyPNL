@@ -17,6 +17,13 @@ const nextConfig = {
       bodySizeLimit: '2mb',
     },
   },
+  // API route configuration
+  api: {
+    bodyParser: {
+      sizeLimit: '2mb', // Maximum request body size
+    },
+    responseLimit: '8mb', // Maximum response size
+  },
 }
 
 module.exports = nextConfig

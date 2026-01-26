@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import DOMPurify from 'isomorphic-dompurify';
 import { screenshotRequestSchema, validateRequestBody } from '@/lib/validation';
 import { screenshotRateLimiter, getClientIP, checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
+import { puppeteerQueue } from '@/lib/puppeteer-queue';
 
 /**
  * Server-side screenshot API using Puppeteer
@@ -29,7 +31,10 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       console.error('[Screenshot API] Failed to parse JSON:', e);
       return NextResponse.json(
-        { error: 'Invalid JSON in request body', details: e instanceof Error ? e.message : 'Unknown error' },
+        { 
+          error: 'Invalid request format',
+          code: 'INVALID_JSON'
+        },
         { status: 400 }
       );
     }
@@ -42,8 +47,8 @@ export async function POST(request: NextRequest) {
       console.error('[Screenshot API] Validation failed:', validationError);
       return NextResponse.json(
         { 
-          error: 'Validation failed',
-          details: validationError instanceof Error ? validationError.message : 'Invalid input'
+          error: 'Invalid request parameters',
+          code: 'VALIDATION_ERROR'
         },
         { status: 400 }
       );
@@ -51,7 +56,26 @@ export async function POST(request: NextRequest) {
 
     const { html, width, height } = validatedBody;
 
-    console.log('[Screenshot API] HTML length:', html.length, 'Width:', width, 'Height:', height);
+    // 5.1: HTML size limit is already enforced by Zod schema (500KB max)
+    // 5.2: Sanitize HTML to prevent XSS attacks
+    const sanitizedHtml = DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: [
+        'div', 'span', 'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+        'img', 'canvas', 'svg', 'path', 'circle', 'rect', 'line', 'polyline',
+        'text', 'tspan', 'g', 'defs', 'clipPath', 'use',
+        'style', 'link',
+      ],
+      ALLOWED_ATTR: [
+        'class', 'id', 'style', 'width', 'height', 'x', 'y', 'cx', 'cy', 'r',
+        'd', 'points', 'fill', 'stroke', 'stroke-width', 'opacity',
+        'transform', 'viewBox', 'xmlns', 'href', 'xlink:href',
+        'src', 'alt', 'data-*',
+      ],
+      ALLOW_DATA_ATTR: true,
+      KEEP_CONTENT: true,
+    });
+
+    console.log('[Screenshot API] HTML length:', html.length, 'Sanitized length:', sanitizedHtml.length, 'Width:', width, 'Height:', height);
 
     // Dynamic import of puppeteer (only load when needed)
     let puppeteer;
@@ -62,14 +86,29 @@ export async function POST(request: NextRequest) {
       console.error('[Screenshot API] Failed to import puppeteer:', importError);
       return NextResponse.json(
         { 
-          error: 'Failed to load Puppeteer', 
-          details: importError instanceof Error ? importError.message : 'Unknown error',
-          hint: 'Make sure puppeteer is installed: npm install puppeteer'
+          error: 'Service configuration error',
+          code: 'PUPPETEER_IMPORT_ERROR'
         },
         { status: 500 }
       );
     }
     
+    // 5.3: Acquire queue slot before launching Puppeteer
+    let releaseQueue: (() => Promise<void>) | null = null;
+    try {
+      releaseQueue = await puppeteerQueue.acquire();
+      console.log('[Screenshot API] Acquired queue slot');
+    } catch (queueError) {
+      console.error('[Screenshot API] Queue timeout:', queueError);
+      return NextResponse.json(
+        { 
+          error: 'Service temporarily unavailable',
+          code: 'QUEUE_TIMEOUT'
+        },
+        { status: 503 }
+      );
+    }
+
     console.log('[Screenshot API] Launching Puppeteer...');
     let browser;
     try {
@@ -88,7 +127,17 @@ export async function POST(request: NextRequest) {
       console.log('[Screenshot API] Puppeteer launched successfully');
     } catch (launchError) {
       console.error('[Screenshot API] Failed to launch Puppeteer:', launchError);
-      throw new Error(`Failed to launch browser: ${launchError instanceof Error ? launchError.message : 'Unknown error'}`);
+      // Release queue slot on error
+      if (releaseQueue) {
+        await releaseQueue();
+      }
+      return NextResponse.json(
+        { 
+          error: 'Failed to generate screenshot',
+          code: 'BROWSER_LAUNCH_ERROR'
+        },
+        { status: 500 }
+      );
     }
 
     try {
@@ -184,7 +233,7 @@ export async function POST(request: NextRequest) {
             </style>
           </head>
           <body>
-            ${html}
+            ${sanitizedHtml}
           </body>
         </html>
       `;
@@ -277,6 +326,11 @@ export async function POST(request: NextRequest) {
       console.log('[Screenshot API] Screenshot taken, closing browser...');
       await browser.close();
 
+      // Release queue slot
+      if (releaseQueue) {
+        await releaseQueue();
+      }
+
       // Convert to base64 data URL
       const base64 = Buffer.from(screenshot).toString('base64');
       const dataUrl = `data:image/jpeg;base64,${base64}`;
@@ -285,15 +339,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ imageUrl: dataUrl });
     } catch (error) {
       console.error('[Screenshot API] Error during screenshot:', error);
-      await browser.close();
-      throw error;
+      // Ensure browser is closed and queue slot is released
+      try {
+        await browser.close();
+      } catch (closeError) {
+        console.error('[Screenshot API] Error closing browser:', closeError);
+      }
+      if (releaseQueue) {
+        try {
+          await releaseQueue();
+        } catch (releaseError) {
+          console.error('[Screenshot API] Error releasing queue:', releaseError);
+        }
+      }
+      // 5.4: Return generic error (detailed error logged server-side)
+      return NextResponse.json(
+        { 
+          error: 'Failed to generate screenshot',
+          code: 'SCREENSHOT_ERROR'
+        },
+        { status: 500 }
+      );
     }
   } catch (error) {
-    console.error('Error in /api/screenshot:', error);
+    // 5.4: Generic error handling - log details server-side, return generic to client
+    const errorCode = error instanceof Error && error.message.includes('timeout') 
+      ? 'REQUEST_TIMEOUT' 
+      : 'UNKNOWN_ERROR';
+    
+    console.error('[Screenshot API] Error:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
+      code: errorCode,
+    });
+    
     return NextResponse.json(
       { 
-        error: 'Failed to generate screenshot', 
-        details: error instanceof Error ? error.message : 'Unknown error' 
+        error: 'Failed to generate screenshot',
+        code: errorCode
       },
       { status: 500 }
     );
