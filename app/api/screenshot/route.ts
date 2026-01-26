@@ -15,17 +15,26 @@ import { loadPuppeteer } from '@/lib/puppeteer-loader';
 // Use Node.js runtime for Puppeteer (required for file system access)
 export const runtime = 'nodejs';
 
-// Prevent execution during build - this route should not be analyzed at build time
+// Prevent Next.js from trying to analyze this route during build
+// This route uses Puppeteer which cannot be analyzed at build time
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+export const fetchCache = 'force-no-store';
+export const dynamicParams = true;
 
 export async function POST(request: NextRequest) {
   // Skip during build - Next.js tries to analyze routes during build
   // Puppeteer causes issues because it tries to access browser files
-  if (process.env.NEXT_PHASE === 'phase-production-build' || process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  // Check if we're in a build context
+  const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' || 
+                      process.env.NEXT_PHASE === 'phase-development-build' ||
+                      !process.env.VERCEL && process.env.NODE_ENV === 'production';
+  
+  if (isBuildTime) {
     // During build, return a simple response to prevent Puppeteer from being analyzed
+    // This prevents Next.js from trying to execute Puppeteer code
     return NextResponse.json({ 
-      error: 'Screenshot service is only available in production runtime',
+      error: 'Screenshot service is only available at runtime',
       code: 'BUILD_TIME_SKIP'
     }, { status: 503 });
   }
