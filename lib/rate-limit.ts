@@ -8,10 +8,13 @@ import { Redis } from '@upstash/redis';
 
 // Initialize Redis client
 // If Upstash credentials are not set, rate limiting will be disabled
-const redis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+// Trim whitespace/newlines from environment variables
+const redisUrl = process.env.UPSTASH_REDIS_REST_URL?.trim();
+const redisToken = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+const redis = redisUrl && redisToken
   ? new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+      url: redisUrl,
+      token: redisToken,
     })
   : null;
 
