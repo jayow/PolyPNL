@@ -4,17 +4,28 @@
  */
 
 let puppeteerCache: typeof import('puppeteer') | null = null;
+let loadError: Error | null = null;
 
 export async function loadPuppeteer() {
   if (puppeteerCache) {
     return puppeteerCache;
   }
   
-  // Only load at runtime, never during build
-  if (typeof window !== 'undefined' || process.env.NEXT_PHASE === 'phase-production-build') {
-    throw new Error('Puppeteer can only be loaded in Node.js runtime');
+  if (loadError) {
+    throw loadError;
   }
   
-  puppeteerCache = await import('puppeteer');
-  return puppeteerCache;
+  // Only load at runtime, never during build
+  if (typeof window !== 'undefined') {
+    loadError = new Error('Puppeteer can only be loaded in Node.js runtime');
+    throw loadError;
+  }
+  
+  try {
+    puppeteerCache = await import('puppeteer');
+    return puppeteerCache;
+  } catch (error) {
+    loadError = error as Error;
+    throw error;
+  }
 }
