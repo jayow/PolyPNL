@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { imageProxyQuerySchema, validateQueryParams } from '@/lib/validation';
+import { imageProxyRateLimiter, getClientIP, checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 
 export async function GET(request: NextRequest) {
+  // Check rate limit
+  const ip = getClientIP(request);
+  const rateLimitResult = await checkRateLimit(imageProxyRateLimiter, ip);
+  
+  if (rateLimitResult && !rateLimitResult.success) {
+    return createRateLimitResponse(rateLimitResult.reset);
+  }
+
   const searchParams = request.nextUrl.searchParams;
   
   // Validate query parameters using Zod

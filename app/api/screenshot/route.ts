@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { screenshotRequestSchema, validateRequestBody } from '@/lib/validation';
+import { screenshotRateLimiter, getClientIP, checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 
 /**
  * Server-side screenshot API using Puppeteer
@@ -13,6 +14,14 @@ export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
+    // Check rate limit
+    const ip = getClientIP(request);
+    const rateLimitResult = await checkRateLimit(screenshotRateLimiter, ip);
+    
+    if (rateLimitResult && !rateLimitResult.success) {
+      return createRateLimitResponse(rateLimitResult.reset);
+    }
+
     console.log('[Screenshot API] Request received');
     let body;
     try {

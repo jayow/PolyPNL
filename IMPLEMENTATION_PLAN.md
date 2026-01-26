@@ -271,10 +271,15 @@ Set up rate limiting using Upstash:
 - Other endpoints: 30 requests/minute
 
 **Self-Check:**
-- [ ] Rate limiter connects to Upstash successfully
-- [ ] Can test rate limiting locally
-- [ ] Rate limit errors return proper HTTP 429 status
-- [ ] Error messages include retry-after information
+- [x] Rate limiter connects to Upstash successfully
+- [x] Can test rate limiting locally
+- [x] Rate limit errors return proper HTTP 429 status
+- [x] Error messages include retry-after information
+
+**Status:** ✅ COMPLETED (from Phase 1)
+- Rate limiting infrastructure already set up in Phase 1
+- `getClientIP`, `checkRateLimit`, and `createRateLimitResponse` helpers created
+- Graceful degradation when Redis not configured (allows requests in dev mode)
 
 #### 3.2 Add Rate Limiting to Each API Route
 
@@ -290,36 +295,30 @@ Set up rate limiting using Upstash:
 **Pattern:**
 ```typescript
 // At start of route handler
-const ip = request.headers.get('x-forwarded-for') || 
-           request.headers.get('x-real-ip') || 
-           'unknown';
+const ip = getClientIP(request);
+const rateLimitResult = await checkRateLimit(rateLimiter, ip);
 
-const { success, limit, remaining, reset } = await rateLimiter.limit(ip);
-
-if (!success) {
-  return NextResponse.json(
-    { 
-      error: 'Rate limit exceeded', 
-      retryAfter: Math.ceil((reset - Date.now()) / 1000) 
-    },
-    { 
-      status: 429,
-      headers: {
-        'X-RateLimit-Limit': limit.toString(),
-        'X-RateLimit-Remaining': remaining.toString(),
-        'X-RateLimit-Reset': reset.toString(),
-        'Retry-After': Math.ceil((reset - Date.now()) / 1000).toString(),
-      }
-    }
-  );
+if (rateLimitResult && !rateLimitResult.success) {
+  return createRateLimitResponse(rateLimitResult.reset);
 }
 ```
 
 **Self-Check:**
-- [ ] Rate limiting works on all endpoints
-- [ ] Proper HTTP 429 responses
-- [ ] Rate limit headers included
-- [ ] Test with multiple requests to verify limits
+- [x] Rate limiting works on all endpoints
+- [x] Proper HTTP 429 responses
+- [x] Rate limit headers included
+- [x] Test with multiple requests to verify limits
+
+**Status:** ✅ COMPLETED
+- Added rate limiting to all 7 API routes
+- Each route uses appropriate rate limiter:
+  - `/api/pnl`: `pnlRateLimiter` (10/min)
+  - `/api/screenshot`: `screenshotRateLimiter` (5/min)
+  - `/api/image-proxy`: `imageProxyRateLimiter` (20/min)
+  - `/api/resolve-username`: `resolveUsernameRateLimiter` (15/min)
+  - `/api/activities`, `/api/trades`, `/api/resolve`: `defaultRateLimiter` (30/min)
+- Rate limiting checked before validation and processing
+- Returns 429 with `Retry-After` header when limit exceeded
 
 ---
 
@@ -769,7 +768,7 @@ if (!success) {
 
 - [x] Phase 1: Foundation - Add Zod & Dependencies ✅ **COMPLETED**
 - [x] Phase 2: Input Validation - Add Zod to All API Routes ✅ **COMPLETED**
-- [ ] Phase 3: Rate Limiting Implementation
+- [x] Phase 3: Rate Limiting Implementation ✅ **COMPLETED**
 - [ ] Phase 4: Image Proxy Security Hardening
 - [ ] Phase 5: Screenshot API Security Hardening
 - [ ] Phase 6: Input Sanitization

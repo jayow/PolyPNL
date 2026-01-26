@@ -3,9 +3,18 @@ import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActi
 import { FIFOPnLEngine } from '@/lib/pnl-engine';
 import { ClosedPosition, PositionSummary } from '@/types';
 import { pnlQuerySchema, validateQueryParams } from '@/lib/validation';
+import { pnlRateLimiter, getClientIP, checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
 
 export async function GET(request: NextRequest) {
   try {
+    // Check rate limit
+    const ip = getClientIP(request);
+    const rateLimitResult = await checkRateLimit(pnlRateLimiter, ip);
+    
+    if (rateLimitResult && !rateLimitResult.success) {
+      return createRateLimitResponse(rateLimitResult.reset);
+    }
+
     const searchParams = request.nextUrl.searchParams;
     
     // Validate query parameters using Zod
