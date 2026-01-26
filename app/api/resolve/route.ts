@@ -1,19 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveProxyWallet } from '@/lib/api-client';
+import { resolveQuerySchema, validateQueryParams } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const wallet = searchParams.get('wallet');
-
-    if (!wallet) {
+    
+    // Validate query parameters using Zod
+    let validatedParams;
+    try {
+      validatedParams = validateQueryParams(resolveQuerySchema, searchParams);
+    } catch (validationError) {
       return NextResponse.json(
-        { error: 'Wallet parameter is required' },
+        { 
+          error: 'Validation failed',
+          details: validationError instanceof Error ? validationError.message : 'Invalid input'
+        },
         { status: 400 }
       );
     }
 
-    const result = await resolveProxyWallet(wallet);
+    const result = await resolveProxyWallet(validatedParams.wallet);
 
     return NextResponse.json(result);
   } catch (error) {

@@ -1,28 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchUserActivity } from '@/lib/api-client';
+import { activitiesQuerySchema, validateQueryParams } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const userAddress = searchParams.get('user');
-    const conditionId = searchParams.get('conditionId');
-    const outcome = searchParams.get('outcome');
-    const openedAt = searchParams.get('openedAt');
-    const closedAt = searchParams.get('closedAt');
-
-    if (!userAddress) {
+    
+    // Validate query parameters using Zod
+    let validatedParams;
+    try {
+      validatedParams = validateQueryParams(activitiesQuerySchema, searchParams);
+    } catch (validationError) {
       return NextResponse.json(
-        { error: 'User address parameter is required' },
+        { 
+          error: 'Validation failed',
+          details: validationError instanceof Error ? validationError.message : 'Invalid input'
+        },
         { status: 400 }
       );
     }
 
-    if (!conditionId || !outcome) {
-      return NextResponse.json(
-        { error: 'conditionId and outcome parameters are required' },
-        { status: 400 }
-      );
-    }
+    const userAddress = validatedParams.user;
+    const conditionId = validatedParams.conditionId;
+    const outcome = validatedParams.outcome;
+    const openedAt = validatedParams.openedAt;
+    const closedAt = validatedParams.closedAt;
 
     console.log(`[API /activities] Fetching activities for user: ${userAddress}, conditionId: ${conditionId}, outcome: ${outcome}`);
     console.log(`[API /activities] Time range: ${openedAt} to ${closedAt || 'now'}`);

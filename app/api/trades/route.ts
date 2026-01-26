@@ -1,27 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveProxyWallet, fetchAllTrades, normalizeTrade, enrichTradesWithMetadata } from '@/lib/api-client';
 import { NormalizedTrade } from '@/types';
+import { tradesQuerySchema, validateQueryParams } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const wallet = searchParams.get('wallet');
-    const start = searchParams.get('start');
-    const end = searchParams.get('end');
-
-    if (!wallet) {
+    
+    // Validate query parameters using Zod
+    let validatedParams;
+    try {
+      validatedParams = validateQueryParams(tradesQuerySchema, searchParams);
+    } catch (validationError) {
       return NextResponse.json(
-        { error: 'Wallet parameter is required' },
+        { 
+          error: 'Validation failed',
+          details: validationError instanceof Error ? validationError.message : 'Invalid input'
+        },
         { status: 400 }
       );
     }
 
     // Resolve proxy wallet first
-    const resolveResult = await resolveProxyWallet(wallet);
+    const resolveResult = await resolveProxyWallet(validatedParams.wallet);
     const userAddress = resolveResult.userAddressUsed;
 
     // Fetch all trades
-    const rawTrades = await fetchAllTrades(userAddress, start || undefined, end || undefined);
+    const rawTrades = await fetchAllTrades(userAddress, validatedParams.start || undefined, validatedParams.end || undefined);
 
     // Normalize trades
     const normalizedTrades: NormalizedTrade[] = rawTrades.map(trade =>

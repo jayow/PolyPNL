@@ -2,19 +2,28 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActivity, normalizeTrade, enrichTradesWithMetadata, fetchMarketMetadata } from '@/lib/api-client';
 import { FIFOPnLEngine } from '@/lib/pnl-engine';
 import { ClosedPosition, PositionSummary } from '@/types';
+import { pnlQuerySchema, validateQueryParams } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
-    const wallet = searchParams.get('wallet');
-    const method = searchParams.get('method') || 'fifo'; // fifo or avg
-
-    if (!wallet) {
+    
+    // Validate query parameters using Zod
+    let validatedParams;
+    try {
+      validatedParams = validateQueryParams(pnlQuerySchema, searchParams);
+    } catch (validationError) {
       return NextResponse.json(
-        { error: 'Wallet parameter is required' },
+        { 
+          error: 'Validation failed',
+          details: validationError instanceof Error ? validationError.message : 'Invalid input'
+        },
         { status: 400 }
       );
     }
+
+    const wallet = validatedParams.wallet;
+    const method = validatedParams.method;
 
     // Resolve proxy wallet first
     console.log(`[API /pnl] Resolving proxy wallet for: ${wallet}`);

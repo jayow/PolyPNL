@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { screenshotRequestSchema, validateRequestBody } from '@/lib/validation';
 
 /**
  * Server-side screenshot API using Puppeteer
@@ -24,15 +25,22 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    const { html, width = 840, height = 472 } = body;
-
-    if (!html) {
-      console.error('[Screenshot API] Missing HTML in request');
+    // Validate request body using Zod
+    let validatedBody;
+    try {
+      validatedBody = validateRequestBody(screenshotRequestSchema, body);
+    } catch (validationError) {
+      console.error('[Screenshot API] Validation failed:', validationError);
       return NextResponse.json(
-        { error: 'HTML content is required' },
+        { 
+          error: 'Validation failed',
+          details: validationError instanceof Error ? validationError.message : 'Invalid input'
+        },
         { status: 400 }
       );
     }
+
+    const { html, width, height } = validatedBody;
 
     console.log('[Screenshot API] HTML length:', html.length, 'Width:', width, 'Height:', height);
 

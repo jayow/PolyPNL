@@ -1,18 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { imageProxyQuerySchema, validateQueryParams } from '@/lib/validation';
 
 export async function GET(request: NextRequest) {
-  const url = request.nextUrl.searchParams.get('url');
+  const searchParams = request.nextUrl.searchParams;
   
-  if (!url) {
-    return new NextResponse('Missing url parameter', { status: 400 });
+  // Validate query parameters using Zod
+  let validatedParams;
+  try {
+    validatedParams = validateQueryParams(imageProxyQuerySchema, searchParams);
+  } catch (validationError) {
+    return NextResponse.json(
+      { 
+        error: 'Validation failed',
+        details: validationError instanceof Error ? validationError.message : 'Invalid URL format'
+      },
+      { status: 400 }
+    );
   }
 
-  // Validate URL to prevent abuse
-  try {
-    new URL(url);
-  } catch {
-    return new NextResponse('Invalid URL', { status: 400 });
-  }
+  const url = validatedParams.url;
 
   try {
     console.log('[Image Proxy] Fetching:', url);

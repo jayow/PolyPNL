@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+/**
+ * Debug API route - DISABLED in production for security
+ * Only available in development mode
+ */
 export async function GET(request: NextRequest) {
+  // Disable in production
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { error: 'Debug endpoint is disabled in production' },
+      { status: 403 }
+    );
+  }
+
   try {
     const searchParams = request.nextUrl.searchParams;
     const wallet = searchParams.get('wallet') || '0x1234567890123456789012345678901234567890';
