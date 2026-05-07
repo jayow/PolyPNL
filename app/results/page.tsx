@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ClosedPosition, PositionSummary, ProxyWalletResponse, OpenPosition, OpenPositionsSummary } from '@/types';
 import OpenPositions from '@/components/OpenPositions';
+import NegRiskEventSummary from '@/components/NegRiskEventSummary';
 import { formatPositionLabel, sideBadgeClasses } from '@/lib/position-display';
 import { collateralAtTimestamp, collateralMix } from '@/lib/collateral';
 
@@ -305,6 +306,9 @@ function ResultsContent() {
           loading={openLoading}
           error={openError}
         />
+
+        {/* NegRisk Event Roll-Up */}
+        {positions.length > 0 && <NegRiskEventSummary positions={positions} />}
 
         {/* Summary Stats */}
         {summary && positions.length > 0 && (
