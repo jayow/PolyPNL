@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ClosedPosition, ProxyWalletResponse } from '@/types';
 import ShareButton from './ShareButton';
-import { shortOutcomeLabel, sideBadgeClasses } from '@/lib/position-display';
+import { shortOutcomeLabel, sideBadgeClasses, marketDisplayTitle } from '@/lib/position-display';
 
 // Helper to build Polymarket URL
 function getPolymarketUrl(position: ClosedPosition, type: 'event' | 'market'): string {
@@ -171,7 +171,7 @@ export default function Table({
                       />
                     )}
                     {(pos.slug || pos.conditionId || pos.marketTitle) ? (
-                      <span 
+                      <span
                         className="truncate hover:text-hyper-accent transition-colors cursor-pointer"
                         onClick={(e) => {
                           e.stopPropagation();
@@ -179,7 +179,7 @@ export default function Table({
                           if (url !== '#') window.open(url, '_blank');
                         }}
                       >
-                        {pos.marketTitle || '-'}
+                        {marketDisplayTitle(pos) || '-'}
                       </span>
                     ) : (
                       <span className="truncate">-</span>

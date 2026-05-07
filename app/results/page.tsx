@@ -7,7 +7,7 @@ import OpenPositions from '@/components/OpenPositions';
 import NegRiskEventSummary from '@/components/NegRiskEventSummary';
 import ConversionsPanel from '@/components/ConversionsPanel';
 import WalletIncomePanel from '@/components/WalletIncomePanel';
-import { formatPositionLabel, sideBadgeClasses } from '@/lib/position-display';
+import { formatPositionLabel, sideBadgeClasses, marketDisplayTitle } from '@/lib/position-display';
 import { collateralAtTimestamp, collateralMix } from '@/lib/collateral';
 
 function ResultsContent() {
@@ -478,9 +478,9 @@ function ResultsContent() {
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         {pos.eventTitle || '-'}
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-300 max-w-xs truncate">
+                      <td className="px-6 py-4 text-sm text-gray-300 max-w-xs truncate" title={pos.marketTitle || ''}>
                         <div className="flex items-center gap-2">
-                          <span className="truncate">{pos.marketTitle || '-'}</span>
+                          <span className="truncate">{marketDisplayTitle(pos) || '-'}</span>
                           {pos.negRisk && (
                             <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-900/50 text-amber-300 rounded uppercase tracking-wide" title="Multi-outcome (NegRisk) market">
                               NegRisk
