@@ -55,7 +55,9 @@ export function groupNegRiskPositionsByEvent(positions: ClosedPosition[]): Event
     g.biggestWin = Math.max(g.biggestWin, pos.realizedPnL);
     g.biggestLoss = Math.min(g.biggestLoss, pos.realizedPnL);
     g.candidates.push({
-      label: pos.marketTitle || pos.outcomeName || pos.outcome,
+      // Short candidate label ("64–66M", "Donald Trump") if Polymarket gave us
+      // groupItemTitle on this market; else fall back to the long question.
+      label: pos.groupItemTitle || pos.marketTitle || pos.outcomeName || pos.outcome,
       pnl: pos.realizedPnL,
       side: pos.side,
     });

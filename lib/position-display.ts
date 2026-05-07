@@ -8,10 +8,13 @@ type SideInput = 'Long YES' | 'Long NO';
  * 1. Pure Yes/No binary ("Will it rain?", outcome ∈ {Yes, No}):
  *    show the canonical "Long YES" / "Long NO".
  *
- * 2. NegRisk multi-outcome event ("Who wins the election?"): each candidate
- *    sub-market is a binary YES/NO on that candidate, with the candidate name
- *    in marketTitle. "Long YES on Trump" reads as "Long Trump"; "Long NO on
- *    Trump" as "Short Trump".
+ * 2. NegRisk multi-outcome event ("Who wins the election?", "MrBeast video
+ *    views day 3"): each sub-market is binary YES/NO on a specific candidate
+ *    or threshold. Polymarket exposes the short candidate label on each
+ *    sub-market as `groupItemTitle` ("Donald Trump", "64–66M"). When that's
+ *    available, "Long YES on 64–66M" reads as "Long 64–66M"; "Long NO" as
+ *    "Short 64–66M". If groupItemTitle isn't present, fall back to the long
+ *    marketTitle question rather than misleadingly labelling it Yes/No.
  *
  * 3. Non-Yes/No binary outcomes (sports games like "76ers vs. Knicks", where
  *    Polymarket uses team names directly as outcomes): the user holds tokens
@@ -23,21 +26,31 @@ export function formatPositionLabel(pos: {
   negRisk?: boolean;
   marketTitle?: string;
   outcomeName?: string;
+  groupItemTitle?: string;
 }): string {
-  // (2) NegRisk: candidate name lives in marketTitle.
+  // 1) Outcome itself is a real label (team name, multi-choice option) rather
+  //    than Yes/No. The user holds that outcome's token directly. "Long Knicks".
+  if (pos.outcomeName && !isYesNo(pos.outcomeName)) {
+    return `Long ${pos.outcomeName.trim()}`;
+  }
+
+  // 2) Grouped sub-market (NegRisk threshold buckets, price targets,
+  //    spreads, etc.). Polymarket gives us a short bucket label in
+  //    groupItemTitle ("64–66M", "$102", "Spread -15.5"). When outcome is
+  //    Yes/No, that short label is the meaningful thing the user bet on.
+  if (pos.groupItemTitle?.trim()) {
+    const candidate = pos.groupItemTitle.trim();
+    return pos.side === 'Long YES' ? `Long ${candidate}` : `Short ${candidate}`;
+  }
+
+  // 3) NegRisk event without groupItemTitle — fall back to the long question
+  //    rather than misleadingly saying "Long YES" on an opaque sub-market.
   if (pos.negRisk && pos.marketTitle?.trim()) {
     const candidate = pos.marketTitle.trim();
     return pos.side === 'Long YES' ? `Long ${candidate}` : `Short ${candidate}`;
   }
 
-  // (3) Outcome is a real label (team name, choice, etc.) rather than Yes/No.
-  // The user holds that outcome's token directly; "Long {outcome}" is the
-  // accurate description regardless of which outcomeIndex it sits at upstream.
-  if (pos.outcomeName && !isYesNo(pos.outcomeName)) {
-    return `Long ${pos.outcomeName.trim()}`;
-  }
-
-  // (1) Pure Yes/No binary — keep canonical labelling.
+  // 4) Pure Yes/No binary ("Will it rain tomorrow?") — keep canonical labels.
   return pos.side;
 }
 
@@ -70,13 +83,23 @@ export function shortOutcomeLabel(pos: {
   negRisk?: boolean;
   marketTitle?: string;
   outcomeName?: string;
+  groupItemTitle?: string;
 }): string {
+  // Real outcome label (team / choice) — show it directly.
+  if (pos.outcomeName && !isYesNo(pos.outcomeName)) {
+    return pos.outcomeName.trim();
+  }
+  // Grouped sub-market with a short bucket label.
+  if (pos.groupItemTitle?.trim()) {
+    return pos.groupItemTitle.trim();
+  }
+  // NegRisk fallback — long question better than misleading YES/NO.
   if (pos.negRisk && pos.marketTitle?.trim()) {
     return pos.marketTitle.trim();
   }
+  // Pure Yes/No.
   if (pos.outcomeName?.trim()) {
-    const v = pos.outcomeName.trim();
-    return isYesNo(v) ? v.toUpperCase() : v;
+    return pos.outcomeName.trim().toUpperCase();
   }
   return pos.side === 'Long YES' ? 'YES' : 'NO';
 }

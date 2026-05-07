@@ -1421,7 +1421,20 @@ export async function fetchMarketMetadata(
     // closed=false for open markets.
     let data: any = null;
 
-    const tryFetch = async (baseUrl: string): Promise<any | null> => {
+    // Validate that a returned market actually matches what we asked for.
+    // Polymarket's /markets?conditionId=... filter is currently broken
+    // (returns 20 unrelated markets ignoring the filter). Without this
+    // check we'd silently ingest random metadata and mislabel positions.
+    const matchesRequest = (market: any): boolean => {
+      if (!market) return false;
+      const cid = (market.conditionId || '').toLowerCase();
+      const wanted = conditionId.toLowerCase();
+      if (cid && cid === wanted) return true;
+      if (slug && market.slug && market.slug.toLowerCase() === slug.toLowerCase()) return true;
+      return false;
+    };
+
+    const tryFetch = async (baseUrl: string, opts: { validate?: boolean } = {}): Promise<any | null> => {
       for (const closedFlag of ['true', 'false']) {
         const url = `${baseUrl}&closed=${closedFlag}`;
         try {
@@ -1430,10 +1443,19 @@ export async function fetchMarketMetadata(
           }, 10000);
           if (!res.ok) continue;
           const body = await res.json();
-          // The /markets endpoint returns an array; only treat non-empty as a hit.
-          if (Array.isArray(body) ? body.length > 0 : body) {
-            return body;
+          if (!Array.isArray(body) || body.length === 0) {
+            if (body && !opts.validate) return body;
+            continue;
           }
+          if (opts.validate) {
+            // The /markets endpoint sometimes ignores the filter and returns
+            // unrelated markets. Only accept results where at least the first
+            // entry actually matches the conditionId or slug we asked for.
+            const match = body.find(matchesRequest);
+            if (match) return [match];
+            continue;
+          }
+          return body;
         } catch {
           // Try next closedFlag
         }
@@ -1442,6 +1464,7 @@ export async function fetchMarketMetadata(
     };
 
     if (slug) {
+      // Slug-based lookup is reliable on Gamma — accept the first result.
       data = await tryFetch(`${GAMMA_API_BASE}/markets?slug=${encodeURIComponent(slug)}`);
       if (!data) {
         console.log(`[fetchMarketMetadata] Slug lookup empty for ${slug}, trying conditionId...`);
@@ -1449,7 +1472,11 @@ export async function fetchMarketMetadata(
     }
 
     if (!data) {
-      data = await tryFetch(`${GAMMA_API_BASE}/markets?conditionId=${encodeURIComponent(conditionId)}`);
+      // conditionId filter is unreliable upstream; insist on validation.
+      data = await tryFetch(`${GAMMA_API_BASE}/markets?conditionId=${encodeURIComponent(conditionId)}`, { validate: true });
+      if (!data) {
+        console.log(`[fetchMarketMetadata] conditionId lookup did not return a matching market for ${conditionId}`);
+      }
     }
 
     if (data) {
@@ -1729,15 +1756,22 @@ export async function fetchMarketMetadata(
           console.log(`[fetchMarketMetadata] Extracted for ${conditionId}: category=${category}, tags=${JSON.stringify(tags)}`);
         }
         
-        const negRisk = market.negRisk === true || market.event?.negRisk === true || undefined;
+        const negRisk = market.negRisk === true || market.event?.negRisk === true || market.events?.[0]?.negRisk === true || undefined;
+
+        // groupItemTitle is the short candidate / threshold label for NegRisk
+        // sub-markets ("64–66M", "Donald Trump"). Polymarket sets it on each
+        // market within a multi-outcome event. Far better than the long
+        // marketTitle question for display.
+        const groupItemTitle = (market.groupItemTitle || '').toString().trim() || undefined;
 
         const metadata: MarketMetadata = {
-          eventTitle: market.event?.title || market.eventTitle,
+          eventTitle: market.event?.title || market.events?.[0]?.title || market.eventTitle,
           marketTitle: market.question || market.title || market.marketTitle,
           outcomeName: outcome ? market.outcomes?.[parseInt(outcome)]?.name : undefined,
           category,
           tags,
           negRisk,
+          groupItemTitle,
         };
 
         marketMetadataCache.set(cacheKey, metadata);
@@ -1868,6 +1902,7 @@ export async function fetchOpenPositions(userAddress: string): Promise<OpenPosit
           mergeable: pos.mergeable,
           endDate: pos.endDate,
           negRisk: pos.negRisk,
+          groupItemTitle: undefined, // Filled later from /markets metadata if present
         });
       }
 
@@ -2046,6 +2081,7 @@ export async function fetchClosedPositions(
           category: undefined,
           tags: undefined,
           negRisk: pos.negRisk,
+          groupItemTitle: undefined, // Filled from markets metadata
         };
 
         // Filter by date range if provided (client-side filtering)

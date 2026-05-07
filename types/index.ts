@@ -87,6 +87,7 @@ export interface ClosedPosition {
   category?: string; // Market category/tag
   tags?: string[]; // Array of tags/categories
   negRisk?: boolean; // True for multi-outcome (NegRiskAdapter) markets
+  groupItemTitle?: string; // Short label for NegRisk sub-market ("64–66M", "Donald Trump")
 }
 
 export interface PositionSummary {
@@ -110,6 +111,7 @@ export interface MarketMetadata {
   category?: string; // Market category/tag (e.g., "pre-market", "swing", etc.)
   tags?: string[]; // Array of tags/categories
   negRisk?: boolean; // True for multi-outcome (NegRiskAdapter) markets
+  groupItemTitle?: string; // Short candidate / bucket label for NegRisk sub-markets ("64–66M", "Donald Trump")
 }
 
 // Polymarket API Response for closed positions
@@ -186,6 +188,7 @@ export interface OpenPosition {
   mergeable?: boolean;
   endDate?: string;
   negRisk?: boolean;
+  groupItemTitle?: string;
 }
 
 export interface OpenPositionsSummary {
