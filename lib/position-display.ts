@@ -28,30 +28,32 @@ export function formatPositionLabel(pos: {
   outcomeName?: string;
   groupItemTitle?: string;
 }): string {
-  // 1) Outcome itself is a real label (team name, multi-choice option) rather
-  //    than Yes/No. The user holds that outcome's token directly. "Long Knicks".
+  // The Side column should reflect the actual outcome the user holds.
+  //
+  // - If the outcome is a real label (team name, multi-choice candidate),
+  //   the user holds that outcome's token directly: "Long Knicks".
+  // - If the outcome is literally Yes / No (every binary market, including
+  //   NegRisk threshold sub-markets where the question is "will views be in
+  //   bucket X?"), then the side is YES or NO — that's what the user bought.
+  //   The bucket label ("64–66M") describes the MARKET, not the side, and is
+  //   surfaced via marketDisplayTitle() instead.
   if (pos.outcomeName && !isYesNo(pos.outcomeName)) {
     return `Long ${pos.outcomeName.trim()}`;
   }
-
-  // 2) Grouped sub-market (NegRisk threshold buckets, price targets,
-  //    spreads, etc.). Polymarket gives us a short bucket label in
-  //    groupItemTitle ("64–66M", "$102", "Spread -15.5"). When outcome is
-  //    Yes/No, that short label is the meaningful thing the user bet on.
-  if (pos.groupItemTitle?.trim()) {
-    const candidate = pos.groupItemTitle.trim();
-    return pos.side === 'Long YES' ? `Long ${candidate}` : `Short ${candidate}`;
-  }
-
-  // 3) NegRisk event without groupItemTitle — fall back to the long question
-  //    rather than misleadingly saying "Long YES" on an opaque sub-market.
-  if (pos.negRisk && pos.marketTitle?.trim()) {
-    const candidate = pos.marketTitle.trim();
-    return pos.side === 'Long YES' ? `Long ${candidate}` : `Short ${candidate}`;
-  }
-
-  // 4) Pure Yes/No binary ("Will it rain tomorrow?") — keep canonical labels.
   return pos.side;
+}
+
+/**
+ * What to show in the "Market" column. For grouped markets (NegRisk view
+ * buckets, price thresholds, spreads), Polymarket's `groupItemTitle` is a
+ * short readable label — "64–66M", "$102", "Spread -15.5" — preferable to
+ * the long marketTitle question.
+ */
+export function marketDisplayTitle(pos: {
+  marketTitle?: string;
+  groupItemTitle?: string;
+}): string {
+  return (pos.groupItemTitle?.trim()) || (pos.marketTitle?.trim()) || '';
 }
 
 function isYesNo(s: string): boolean {
@@ -85,21 +87,12 @@ export function shortOutcomeLabel(pos: {
   outcomeName?: string;
   groupItemTitle?: string;
 }): string {
-  // Real outcome label (team / choice) — show it directly.
-  if (pos.outcomeName && !isYesNo(pos.outcomeName)) {
-    return pos.outcomeName.trim();
-  }
-  // Grouped sub-market with a short bucket label.
-  if (pos.groupItemTitle?.trim()) {
-    return pos.groupItemTitle.trim();
-  }
-  // NegRisk fallback — long question better than misleading YES/NO.
-  if (pos.negRisk && pos.marketTitle?.trim()) {
-    return pos.marketTitle.trim();
-  }
-  // Pure Yes/No.
+  // Show the outcome the user actually holds — team name, multi-choice
+  // candidate, or YES/NO. Bucket labels ("64–66M") are NOT the outcome,
+  // they're the market.
   if (pos.outcomeName?.trim()) {
-    return pos.outcomeName.trim().toUpperCase();
+    const v = pos.outcomeName.trim();
+    return isYesNo(v) ? v.toUpperCase() : v;
   }
   return pos.side === 'Long YES' ? 'YES' : 'NO';
 }

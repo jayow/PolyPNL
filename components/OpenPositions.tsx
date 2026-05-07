@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { OpenPosition, OpenPositionsSummary } from '@/types';
-import { formatPositionLabel, sideBadgeClasses } from '@/lib/position-display';
+import { formatPositionLabel, sideBadgeClasses, marketDisplayTitle } from '@/lib/position-display';
 import { useLivePrices } from '@/lib/use-live-prices';
 
 interface Props {
@@ -141,7 +141,7 @@ export default function OpenPositions({ positions, summary, loading, error }: Pr
                 <tr key={`${pos.conditionId}:${pos.asset}-${idx}`} className="hover:bg-gray-750 transition-colors">
                   <td className="px-4 py-3 text-sm text-gray-300 max-w-xs truncate">
                     <div className="flex items-center gap-2">
-                      <span className="truncate">{pos.marketTitle || '-'}</span>
+                      <span className="truncate" title={pos.marketTitle || ''}>{marketDisplayTitle(pos) || '-'}</span>
                       {pos.negRisk && (
                         <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-900/50 text-amber-300 rounded uppercase tracking-wide" title="Multi-outcome (NegRisk) market">
                           NegRisk
