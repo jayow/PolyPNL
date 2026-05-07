@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { ClosedPosition, PositionSummary, ProxyWalletResponse, OpenPosition, OpenPositionsSummary } from '@/types';
 import OpenPositions from '@/components/OpenPositions';
 import { formatPositionLabel, sideBadgeClasses } from '@/lib/position-display';
+import { collateralAtTimestamp, collateralMix } from '@/lib/collateral';
 
 function ResultsContent() {
   const searchParams = useSearchParams();
@@ -261,6 +262,19 @@ function ResultsContent() {
             </div>
           )}
 
+          {(() => {
+            if (positions.length === 0) return null;
+            const mix = collateralMix(positions.map((p) => p.closedAt ?? p.openedAt));
+            if (!mix.mixed) return null;
+            return (
+              <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-3 mb-4 text-xs text-gray-400">
+                Collateral note: this wallet&apos;s history straddles the Apr 28 2026 CLOB V2 migration.
+                Trades closed before then settled in <span className="text-gray-200">USDC.e</span> ({mix.USDCeCount}),
+                trades after settled in <span className="text-gray-200">pUSD</span> ({mix.pUSDCount}). Both are 1:1 USD-denominated.
+              </div>
+            );
+          })()}
+
           {positions.length === 0 && !loading && (
             <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-8 text-center">
               <p className="text-xl text-yellow-200 mb-2">No closed positions found</p>
@@ -429,7 +443,14 @@ function ResultsContent() {
                         {new Date(pos.openedAt).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                        {pos.closedAt ? new Date(pos.closedAt).toLocaleDateString() : '-'}
+                        <div className="flex items-center gap-2">
+                          <span>{pos.closedAt ? new Date(pos.closedAt).toLocaleDateString() : '-'}</span>
+                          {collateralAtTimestamp(pos.closedAt) === 'USDC.e' && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-gray-700 text-gray-300 rounded uppercase tracking-wide" title="Settled pre-CLOB-V2 migration in USDC.e">
+                              USDC.e
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-right">
                         {pos.entryVWAP.toFixed(4)}
