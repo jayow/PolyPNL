@@ -1013,7 +1013,14 @@ export async function fetchUserActivity(
   console.log(`[API] Total activities fetched: ${allActivities.length}`);
   return allActivities;
 }
-export async function fetchAllTrades(
+/**
+ * Polymarket caps a single /trades query at 1500 records (limit=500 * 3 pages).
+ * For active wallets we walk further back in time using the `end` cursor.
+ */
+const TRADES_WINDOW_CAP = 1500;
+const MAX_TRADE_WINDOWS = 10; // up to ~15,000 trades
+
+async function fetchTradesWindow(
   userAddress: string,
   startDate?: string,
   endDate?: string
@@ -1171,13 +1178,69 @@ export async function fetchAllTrades(
     }
   }
 
-  console.log(`[API] Completed fetching trades: ${allTrades.length} total trades from ${page - 1} pages`);
+  console.log(`[API] Completed fetching trades window: ${allTrades.length} trades from ${page - 1} pages`);
 
   // Sort by timestamp ascending
   allTrades.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   return allTrades;
 }
+
+/**
+ * Fetch all trades for a wallet, walking the API's offset-capped windows by
+ * stepping the `end` cursor backward when a window saturates. Each window
+ * yields up to TRADES_WINDOW_CAP records (1500); we walk up to MAX_TRADE_WINDOWS
+ * of them.
+ */
+export async function fetchAllTrades(
+  userAddress: string,
+  startDate?: string,
+  endDate?: string
+): Promise<PolymarketTrade[]> {
+  const allTrades: PolymarketTrade[] = [];
+  const seenIds = new Set<string>();
+  let currentEnd = endDate;
+  const startMs = startDate ? new Date(startDate).getTime() : -Infinity;
+
+  for (let windowIdx = 0; windowIdx < MAX_TRADE_WINDOWS; windowIdx++) {
+    const windowTrades = await fetchTradesWindow(userAddress, startDate, currentEnd);
+    if (windowTrades.length === 0) break;
+
+    let newCount = 0;
+    let earliestMs = Number.POSITIVE_INFINITY;
+    for (const trade of windowTrades) {
+      const id = trade.id || trade.hash || `${trade.timestamp}-${trade.user}-${trade.size}`;
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        allTrades.push(trade);
+        newCount++;
+      }
+      const ts = new Date(trade.timestamp).getTime();
+      if (Number.isFinite(ts) && ts < earliestMs) earliestMs = ts;
+    }
+
+    // If the window didn't fill, there's nothing older — done.
+    if (windowTrades.length < TRADES_WINDOW_CAP) break;
+    // If everything we got was a duplicate of the previous window, the
+    // boundary cursor isn't advancing — stop to avoid an infinite loop.
+    if (newCount === 0) break;
+    if (!Number.isFinite(earliestMs)) break;
+
+    // Step `end` back by 1 second past the earliest record to avoid refetching
+    // the boundary trade. The +/-1s slop is fine because /trades dedupes by id.
+    const nextEndMs = earliestMs - 1000;
+    if (nextEndMs <= startMs) break;
+    currentEnd = new Date(nextEndMs).toISOString();
+    console.log(`[API] Trade window ${windowIdx + 1} saturated (${windowTrades.length}); walking back to end=${currentEnd}`);
+  }
+
+  // Re-sort the merged set since concatenated windows may interleave.
+  allTrades.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  console.log(`[API] Completed fetching trades: ${allTrades.length} total across ${MAX_TRADE_WINDOWS} max windows`);
+  return allTrades;
+}
+
 export function normalizeTrade(trade: PolymarketTrade, userAddress: string): NormalizedTrade {
   // Extract conditionId from various possible fields
   const conditionId = trade.conditionId || 
