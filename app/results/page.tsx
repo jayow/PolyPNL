@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { ClosedPosition, PositionSummary, ProxyWalletResponse, OpenPosition, OpenPositionsSummary } from '@/types';
 import OpenPositions from '@/components/OpenPositions';
+import { formatPositionLabel, sideBadgeClasses } from '@/lib/position-display';
 
 function ResultsContent() {
   const searchParams = useSearchParams();
@@ -420,10 +421,8 @@ function ResultsContent() {
                         {pos.outcomeName || pos.outcome}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                          pos.side === 'Long YES' ? 'bg-blue-900/50 text-blue-300' : 'bg-purple-900/50 text-purple-300'
-                        }`}>
-                          {pos.side}
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${sideBadgeClasses(pos.side)}`}>
+                          {formatPositionLabel(pos)}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">

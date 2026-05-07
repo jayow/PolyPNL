@@ -1,6 +1,7 @@
 'use client';
 
 import { OpenPosition, OpenPositionsSummary } from '@/types';
+import { formatPositionLabel, sideBadgeClasses } from '@/lib/position-display';
 
 interface Props {
   positions: OpenPosition[];
@@ -96,10 +97,8 @@ export default function OpenPositions({ positions, summary, loading, error }: Pr
                     {pos.outcomeName || pos.outcome}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm">
-                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                      pos.side === 'Long YES' ? 'bg-blue-900/50 text-blue-300' : 'bg-purple-900/50 text-purple-300'
-                    }`}>
-                      {pos.side}
+                    <span className={`px-2 py-1 rounded-full text-xs font-semibold ${sideBadgeClasses(pos.side)}`}>
+                      {formatPositionLabel(pos)}
                     </span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-300 text-right">{pos.size.toFixed(2)}</td>
