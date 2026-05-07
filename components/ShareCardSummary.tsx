@@ -3,6 +3,7 @@
 import { useEffect, useRef, useMemo } from 'react';
 import { PositionSummary, ClosedPosition } from '@/types';
 import { SHARE_W, SHARE_H, SAFE_PAD } from './ShareCard';
+import { isBinaryYesNoOutcome } from '@/lib/position-display';
 
 interface ShareCardSummaryProps {
   summary: PositionSummary;
@@ -319,9 +320,10 @@ export default function ShareCardSummary({
     return avoidOverlap(bestPos, worstPos);
   }, [cumulativeData, bestPosition, worstPosition]);
 
-  // Calculate YES/NO stats
-  const yesPositions = positions.filter(pos => pos.side === 'Long YES');
-  const noPositions = positions.filter(pos => pos.side === 'Long NO');
+  // Calculate YES/NO stats — only over genuine Yes/No markets.
+  const binaryPositions = positions.filter(isBinaryYesNoOutcome);
+  const yesPositions = binaryPositions.filter(pos => pos.side === 'Long YES');
+  const noPositions = binaryPositions.filter(pos => pos.side === 'Long NO');
   
   const yesPnL = yesPositions.reduce((sum, pos) => sum + pos.realizedPnL, 0);
   const yesWins = yesPositions.filter(pos => pos.realizedPnL > 0).length;

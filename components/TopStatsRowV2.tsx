@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { PositionSummary } from '@/types';
 import { ClosedPosition, ProxyWalletResponse } from '@/types';
 import ShareButtonSummary from './ShareButtonSummary';
+import { isBinaryYesNoOutcome } from '@/lib/position-display';
 
 interface TopStatsRowV2Props {
   summary: PositionSummary;
@@ -49,9 +50,11 @@ export default function TopStatsRowV2({ summary, positions, username, profileIma
   const tagsContainerRef = useRef<HTMLDivElement>(null);
   const [displayedTags, setDisplayedTags] = useState<string[]>([]);
   
-  // Calculate YES/NO stats (same logic as YesNoAnalytics, no changes)
-  const yesPositions = positions.filter(pos => pos.side === 'Long YES');
-  const noPositions = positions.filter(pos => pos.side === 'Long NO');
+  // Calculate YES/NO stats — only over genuine Yes/No markets so team /
+  // candidate positions don't inflate the buckets.
+  const binaryPositions = positions.filter(isBinaryYesNoOutcome);
+  const yesPositions = binaryPositions.filter(pos => pos.side === 'Long YES');
+  const noPositions = binaryPositions.filter(pos => pos.side === 'Long NO');
   
   const yesPnL = yesPositions.reduce((sum, pos) => sum + pos.realizedPnL, 0);
   const yesWins = yesPositions.filter(pos => pos.realizedPnL > 0).length;

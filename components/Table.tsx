@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { ClosedPosition, ProxyWalletResponse } from '@/types';
 import ShareButton from './ShareButton';
+import { shortOutcomeLabel, sideBadgeClasses } from '@/lib/position-display';
 
 // Helper to build Polymarket URL
 function getPolymarketUrl(position: ClosedPosition, type: 'event' | 'market'): string {
@@ -192,7 +193,7 @@ export default function Table({
                   <span className={`px-2 py-1 rounded text-xs font-medium ${
                     pos.side === 'Long YES' ? 'bg-hyper-accent/20 text-hyper-accent' : 'bg-hyper-negative/20 text-hyper-negative'
                   }`}>
-                    {pos.side === 'Long YES' ? 'YES' : 'NO'}
+                    {shortOutcomeLabel(pos)}
                   </span>
                 </td>
                 <td className="px-3 py-2 text-hyper-textSecondary">

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { ClosedPosition } from '@/types';
+import { isBinaryYesNoOutcome } from '@/lib/position-display';
 
 interface AdvancedAnalyticsProps {
   positions: ClosedPosition[];
@@ -110,8 +111,9 @@ export default function AdvancedAnalytics({ positions }: AdvancedAnalyticsProps)
       const biggestWin = data.wins.length > 0 ? Math.max(...data.wins) : 0;
       const biggestLoss = data.losses.length > 0 ? Math.min(...data.losses) : 0;
 
-      // YES positions stats
-      const yesPositions = data.positions.filter(pos => pos.side === 'Long YES');
+      // YES positions stats — only count true Yes/No markets (skip sports / multi-choice)
+      const binaryPositions = data.positions.filter(isBinaryYesNoOutcome);
+      const yesPositions = binaryPositions.filter(pos => pos.side === 'Long YES');
       const yesPnL = yesPositions.reduce((sum, pos) => sum + pos.realizedPnL, 0);
       const yesWins = yesPositions.filter(pos => pos.realizedPnL > 0).length;
       const yesWinRate = yesPositions.length > 0 ? (yesWins / yesPositions.length) * 100 : 0;
@@ -119,7 +121,7 @@ export default function AdvancedAnalytics({ positions }: AdvancedAnalyticsProps)
       const yesCount = yesPositions.length;
 
       // NO positions stats
-      const noPositions = data.positions.filter(pos => pos.side === 'Long NO');
+      const noPositions = binaryPositions.filter(pos => pos.side === 'Long NO');
       const noPnL = noPositions.reduce((sum, pos) => sum + pos.realizedPnL, 0);
       const noWins = noPositions.filter(pos => pos.realizedPnL > 0).length;
       const noWinRate = noPositions.length > 0 ? (noWins / noPositions.length) * 100 : 0;

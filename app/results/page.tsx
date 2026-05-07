@@ -188,7 +188,8 @@ function ResultsContent() {
       'Event Title',
       'Market Title',
       'Outcome',
-      'Side',
+      'Position',           // Human-readable label (e.g. "Long Knicks", "Long YES")
+      'Side (raw)',         // Internal direction tag, kept for compatibility
       'Opened At',
       'Closed At',
       'Entry VWAP',
@@ -203,6 +204,7 @@ function ResultsContent() {
       pos.eventTitle || '',
       pos.marketTitle || '',
       pos.outcomeName || pos.outcome,
+      formatPositionLabel(pos),
       pos.side,
       pos.openedAt,
       pos.closedAt || '',

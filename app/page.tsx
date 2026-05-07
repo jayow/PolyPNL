@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { ClosedPosition, PositionSummary, ProxyWalletResponse } from '@/types';
+import { formatPositionLabel } from '@/lib/position-display';
 import Toolbar from '@/components/Toolbar';
 import SummaryCards, { SummaryCardsLayout } from '@/components/SummaryCards';
 import YesNoAnalytics from '@/components/YesNoAnalytics';
@@ -200,7 +201,8 @@ export default function Home() {
       'Event Title',
       'Market Title',
       'Outcome',
-      'Side',
+      'Position',
+      'Side (raw)',
       'Opened At',
       'Closed At',
       'Entry VWAP',
@@ -215,6 +217,7 @@ export default function Home() {
       pos.eventTitle || '',
       pos.marketTitle || '',
       pos.outcomeName || pos.outcome,
+      formatPositionLabel(pos),
       pos.side,
       pos.openedAt,
       pos.closedAt || '',
