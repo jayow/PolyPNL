@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActivity, normalizeTrade, enrichTradesWithMetadata, fetchMarketMetadata } from '@/lib/api-client';
+import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActivity, fetchAllUserActivity, normalizeTrade, enrichTradesWithMetadata, fetchMarketMetadata } from '@/lib/api-client';
 import { FIFOPnLEngine } from '@/lib/pnl-engine';
+import { buildLedger, realizedPnLForEvent } from '@/lib/ledger-pnl';
 import { ClosedPosition, PositionSummary } from '@/types';
 import { pnlQuerySchema, validateQueryParams } from '@/lib/validation';
 import { pnlRateLimiter, getClientIP, checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
@@ -280,12 +281,62 @@ export async function GET(request: NextRequest) {
     // Calculate summary statistics
     const summary = calculateSummary(closedPositions);
 
+    // Cash-flow ledger over /activity — accurate for NegRisk because event-level
+    // cashIn-cashOut captures conversions correctly. Runs in parallel with the
+    // closed-positions path; failures are non-fatal and we still return the
+    // existing per-position data unchanged.
+    let ledger = null as null | ReturnType<typeof buildLedger>;
+    try {
+      console.log(`[API /pnl] Fetching full activity history for ledger PnL...`);
+      const activity = await fetchAllUserActivity(userAddress);
+      ledger = buildLedger(activity as any);
+      console.log(`[API /pnl] Ledger built: ${ledger.summary.rowsProcessed} rows, totalRealizedPnL=${ledger.summary.totalRealizedPnL.toFixed(2)}`);
+    } catch (ledgerErr) {
+      console.warn(`[API /pnl] Ledger build failed:`, ledgerErr);
+    }
+
+    // Cross-validate ledger vs Polymarket's per-position realizedPnl total.
+    const positionsRealizedTotal = closedPositions.reduce((s, p) => s + p.realizedPnL, 0);
+    const validation = ledger
+      ? {
+          ledgerRealizedPnL: ledger.summary.totalRealizedPnL,
+          polymarketRealizedPnL: positionsRealizedTotal,
+          diff: ledger.summary.totalRealizedPnL - positionsRealizedTotal,
+          // Anything bigger than $1 of asymmetry is worth flagging — usually a
+          // NegRisk conversion or a missed reward.
+          significantDiff: Math.abs(ledger.summary.totalRealizedPnL - positionsRealizedTotal) > 1,
+          rowsProcessed: ledger.summary.rowsProcessed,
+          rowsByType: ledger.summary.rowsByType,
+        }
+      : null;
+
     return NextResponse.json({
       positions: closedPositions,
       summary,
       resolveResult,
       tradesCount: tradesCount || closedPositions.length,
       method: closedPositions.length > 0 && tradesCount === 0 ? 'api' : method, // Mark if using API
+      ledger: ledger
+        ? {
+            summary: ledger.summary,
+            // Only ship event-level rollups to the client (asset rollups are
+            // larger and not used by the UI today).
+            byEvent: ledger.byEvent.map((e) => ({
+              eventKey: e.eventKey,
+              eventTitle: e.eventTitle,
+              cashIn: e.cashIn,
+              cashOut: e.cashOut,
+              realizedPnL: realizedPnLForEvent(e),
+              tradesCount: e.tradesCount,
+              splitsCount: e.splitsCount,
+              mergesCount: e.mergesCount,
+              redemptionsCount: e.redemptionsCount,
+              conversionsCount: e.conversionsCount,
+              rewardsTotal: e.rewardsTotal,
+            })),
+          }
+        : null,
+      validation,
     });
   } catch (error) {
     console.error('Error in /api/pnl:', error);

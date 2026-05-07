@@ -215,3 +215,37 @@ export interface NegRiskActivity {
   usdcAmount?: number;
   raw: Record<string, any>; // Original API row, for debugging.
 }
+
+/** Ledger response shape that /api/pnl returns alongside the per-position data. */
+export interface LedgerEventRow {
+  eventKey: string;
+  eventTitle?: string;
+  cashIn: number;
+  cashOut: number;
+  realizedPnL: number;
+  tradesCount: number;
+  splitsCount: number;
+  mergesCount: number;
+  redemptionsCount: number;
+  conversionsCount: number;
+  rewardsTotal: number;
+}
+
+export interface LedgerSummaryShape {
+  totalRealizedPnL: number;
+  totalCashIn: number;
+  totalCashOut: number;
+  totalRewards: number;
+  rowsProcessed: number;
+  rowsByType: Record<string, number>;
+  rowsSkipped: number;
+}
+
+export interface PnLValidation {
+  ledgerRealizedPnL: number;
+  polymarketRealizedPnL: number;
+  diff: number;
+  significantDiff: boolean;
+  rowsProcessed: number;
+  rowsByType: Record<string, number>;
+}

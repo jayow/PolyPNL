@@ -937,6 +937,73 @@ export async function resolveProxyWalletWithUsername(wallet: string): Promise<{
   };
 }
 
+/**
+ * Fetch ALL activity for a wallet, walking the same date-window strategy as
+ * fetchAllTrades to escape the 1000-offset cap. Used by the cash-flow ledger
+ * to get a complete history (TRADE + SPLIT + MERGE + REDEEM + CONVERSION +
+ * REWARD + MAKER_REBATE + REFERRAL_REWARD).
+ */
+export async function fetchAllUserActivity(
+  userAddress: string,
+  options: {
+    type?: string[];
+    side?: 'BUY' | 'SELL';
+  } = {}
+): Promise<Array<{ timestamp: number; conditionId: string; type: string; [key: string]: any }>> {
+  const all: any[] = [];
+  const seenHashes = new Set<string>();
+  let endTimestampMs: number | undefined = undefined;
+
+  for (let windowIdx = 0; windowIdx < MAX_TRADE_WINDOWS; windowIdx++) {
+    const window = await fetchUserActivity(userAddress, {
+      type: options.type,
+      side: options.side,
+      sortBy: 'TIMESTAMP',
+      sortDirection: 'DESC',
+      limit: TRADES_WINDOW_CAP,
+      // Pass end as a Unix-seconds string; activity API accepts numeric
+      // end/start filters when present, otherwise ignores them silently.
+      end: endTimestampMs != null ? Math.floor(endTimestampMs / 1000) : undefined,
+    });
+
+    if (window.length === 0) break;
+
+    let newCount = 0;
+    let earliestMs = Number.POSITIVE_INFINITY;
+    for (const a of window) {
+      // Dedup by transactionHash + type + asset (best signal we have).
+      const key = `${a.transactionHash || ''}:${a.type}:${a.asset || ''}:${a.timestamp}`;
+      if (seenHashes.has(key)) continue;
+      seenHashes.add(key);
+      all.push(a);
+      newCount++;
+      const tsMs = typeof a.timestamp === 'number'
+        ? (a.timestamp < 1e12 ? a.timestamp * 1000 : a.timestamp)
+        : new Date(a.timestamp).getTime();
+      if (Number.isFinite(tsMs) && tsMs < earliestMs) earliestMs = tsMs;
+    }
+
+    // Cap not hit -> no more older history to fetch.
+    if (window.length < TRADES_WINDOW_CAP) break;
+    if (newCount === 0) break;
+    if (!Number.isFinite(earliestMs)) break;
+
+    // Step end cursor 1s past the earliest record so we don't refetch it.
+    endTimestampMs = earliestMs - 1000;
+    console.log(`[API] Activity window ${windowIdx + 1} saturated (${window.length}); walking back to end=${endTimestampMs}`);
+  }
+
+  // Sort ascending by timestamp for downstream replay.
+  all.sort((a, b) => {
+    const ta = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp).getTime() / 1000;
+    const tb = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp).getTime() / 1000;
+    return ta - tb;
+  });
+
+  console.log(`[API] Total activity fetched: ${all.length}`);
+  return all;
+}
+
 export async function fetchUserActivity(
   userAddress: string,
   options: {
@@ -945,6 +1012,8 @@ export async function fetchUserActivity(
     sortBy?: 'TIMESTAMP' | 'TOKENS' | 'CASH';
     sortDirection?: 'ASC' | 'DESC';
     limit?: number;
+    end?: number;   // Unix seconds
+    start?: number; // Unix seconds
   } = {}
 ): Promise<Array<{
   timestamp: number;
@@ -983,6 +1052,13 @@ export async function fetchUserActivity(
 
       if (options.side) {
         params.append('side', options.side);
+      }
+
+      if (typeof options.end === 'number' && Number.isFinite(options.end)) {
+        params.append('end', options.end.toString());
+      }
+      if (typeof options.start === 'number' && Number.isFinite(options.start)) {
+        params.append('start', options.start.toString());
       }
 
       console.log(`[API] Fetching activity offset ${offset} for user: ${userAddress}`);
