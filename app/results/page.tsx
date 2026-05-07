@@ -480,7 +480,7 @@ function ResultsContent() {
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-300 max-w-xs truncate" title={pos.marketTitle || ''}>
                         <div className="flex items-center gap-2">
-                          <span className="truncate">{marketDisplayTitle(pos) || '-'}</span>
+                          <span className="truncate">{pos.marketTitle || '-'}</span>
                           {pos.negRisk && (
                             <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-900/50 text-amber-300 rounded uppercase tracking-wide" title="Multi-outcome (NegRisk) market">
                               NegRisk
