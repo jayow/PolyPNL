@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActivity, fetchAllUserActivity, normalizeTrade, enrichTradesWithMetadata, fetchMarketMetadata } from '@/lib/api-client';
+import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActivity, fetchAllUserActivity, normalizeTrade, enrichTradesWithMetadata, fetchMarketMetadata, fetchOpenPositions } from '@/lib/api-client';
 import { FIFOPnLEngine } from '@/lib/pnl-engine';
 import { buildLedger, realizedPnLForEvent } from '@/lib/ledger-pnl';
 import { ClosedPosition, PositionSummary } from '@/types';
@@ -285,12 +285,34 @@ export async function GET(request: NextRequest) {
     // cashIn-cashOut captures conversions correctly. Runs in parallel with the
     // closed-positions path; failures are non-fatal and we still return the
     // existing per-position data unchanged.
+    //
+    // We also pass in /positions so the ledger can subtract still-deployed cost
+    // basis from "realized PnL" — without that, every buy on a still-open
+    // position gets booked as a loss.
     let ledger = null as null | ReturnType<typeof buildLedger>;
     try {
-      console.log(`[API /pnl] Fetching full activity history for ledger PnL...`);
-      const activity = await fetchAllUserActivity(userAddress);
-      ledger = buildLedger(activity as any);
-      console.log(`[API /pnl] Ledger built: ${ledger.summary.rowsProcessed} rows, totalRealizedPnL=${ledger.summary.totalRealizedPnL.toFixed(2)}`);
+      console.log(`[API /pnl] Fetching full activity history + open positions for ledger PnL...`);
+      const [activity, openPositionsForLedger] = await Promise.all([
+        fetchAllUserActivity(userAddress),
+        fetchOpenPositions(userAddress).catch((e) => {
+          console.warn(`[API /pnl] Open positions fetch failed; ledger will overstate realized loss:`, e);
+          return [];
+        }),
+      ]);
+      ledger = buildLedger(activity as any, {
+        openPositions: openPositionsForLedger.map((p) => ({
+          asset: p.asset,
+          conditionId: p.conditionId,
+          size: p.size,
+          avgPrice: p.avgPrice,
+          initialValue: p.initialValue,
+          currentValue: p.currentValue,
+          cashPnl: p.unrealizedPnL,
+          eventSlug: p.eventSlug,
+          title: p.marketTitle,
+        })),
+      });
+      console.log(`[API /pnl] Ledger built: ${ledger.summary.rowsProcessed} rows, realized=${ledger.summary.totalRealizedPnL.toFixed(2)}, unrealized=${ledger.summary.totalUnrealizedPnL.toFixed(2)}, openCostBasis=${ledger.summary.totalOpenCostBasis.toFixed(2)}`);
     } catch (ledgerErr) {
       console.warn(`[API /pnl] Ledger build failed:`, ledgerErr);
     }
@@ -327,6 +349,9 @@ export async function GET(request: NextRequest) {
               cashIn: e.cashIn,
               cashOut: e.cashOut,
               realizedPnL: realizedPnLForEvent(e),
+              unrealizedPnL: e.unrealizedPnL,
+              openCostBasis: e.openCostBasis,
+              fullyClosed: e.fullyClosed,
               tradesCount: e.tradesCount,
               splitsCount: e.splitsCount,
               mergesCount: e.mergesCount,

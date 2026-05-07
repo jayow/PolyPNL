@@ -3,30 +3,41 @@
  *
  * Replaces the FIFO engine for NegRisk-correct accuracy. Instead of trying to
  * match buys against sells (which breaks when CONVERSION / SPLIT / MERGE /
- * REDEEM events transmute tokens without a clean counterparty trade), we
- * sum every USDC inflow and outflow for each (asset, event) bucket directly
- * from /activity rows.
+ * REDEEM events transmute tokens without a clean counterparty trade), we sum
+ * every USDC inflow and outflow per event from /activity, then add back the
+ * cost basis of still-open positions so we don't book unrealized capital
+ * deployment as realized loss.
  *
- * Why this is accurate for NegRisk:
- *   At the EVENT level, conversions are pure USDC deltas — the token sides
- *   net out within the event (a NO -> (YES + USDC) conversion still leaves
- *   the event's total token-collateral balance unchanged). So summing
- *   cash_in - cash_out per event gives the true realized PnL for resolved
- *   NegRisk events without needing onchain reads.
+ * Realized PnL identity:
  *
- * Activity types and how they post to the ledger:
- *   TRADE  BUY  : cash_out += usdcSize, tokens_in += size  (asset)
- *   TRADE  SELL : cash_in  += usdcSize, tokens_out += size (asset)
- *   SPLIT       : cash_out += usdcSize, both YES+NO of conditionId minted
- *   MERGE       : cash_in  += usdcSize, both YES+NO of conditionId burned
- *   REDEEM      : cash_in  += usdcSize, tokens_out += size (asset)
- *   CONVERSION  : cash_in  += usdcSize  (NegRiskAdapter pays USDC; token
- *                                         transfers are internal to the event
- *                                         and net out at event scope)
- *   REWARD / MAKER_REBATE / REFERRAL_REWARD: cash_in += usdcSize (event-level
- *                                                                  if conditionId
- *                                                                  present, else
- *                                                                  unattributed)
+ *   realized_event = (cashIn_event - cashOut_event) + openCostBasis_event
+ *
+ *   - cashIn / cashOut: every USDC movement on the event from /activity
+ *     (TRADE BUY/SELL, SPLIT, MERGE, REDEEM, CONVERSION, REWARD, etc.).
+ *   - openCostBasis: dollars still tied up in tokens you haven't sold or
+ *     redeemed yet. Sourced from /positions: sum(size * avgPrice) for any
+ *     open asset whose conditionId is in this event.
+ *
+ *   Adding the open cost basis back removes the spend on currently-held
+ *   tokens from "realized" — that capital isn't lost, it's deployed.
+ *
+ * Why event-level is exact for NegRisk:
+ *
+ *   Conversions are token transfers between candidate sub-markets within a
+ *   single event. The USDC delta is the only thing that crosses the event
+ *   boundary. cashIn - cashOut captures that delta exactly without needing
+ *   onchain log reads.
+ *
+ * Activity types and how they post:
+ *
+ *   TRADE BUY                    cashOut += usdcSize   (asset, tokensIn += size)
+ *   TRADE SELL                   cashIn  += usdcSize   (asset, tokensOut += size)
+ *   SPLIT                        cashOut += usdcSize   (event)
+ *   MERGE                        cashIn  += usdcSize   (event)
+ *   REDEEM                       cashIn  += usdcSize   (asset + event)
+ *   CONVERSION                   cashIn  += usdcSize   (event)
+ *   REWARD/MAKER_REBATE/YIELD/   cashIn  += usdcSize, attributed to event
+ *   REFERRAL_REWARD              if conditionId present, else to globalRewards.
  */
 
 export interface RawActivity {
@@ -48,6 +59,19 @@ export interface RawActivity {
   [key: string]: any;
 }
 
+/** Subset of PolymarketOpenPosition fields the ledger needs. */
+export interface LedgerOpenPosition {
+  asset: string;
+  conditionId: string;
+  size: number;
+  avgPrice: number;
+  initialValue: number;
+  currentValue: number;
+  cashPnl: number;
+  eventSlug?: string;
+  title?: string;
+}
+
 export interface AssetBucket {
   asset: string;
   conditionId: string;
@@ -58,8 +82,8 @@ export interface AssetBucket {
   tokensIn: number;
   tokensOut: number;
   tradesCount: number;
-  firstTimestamp: number; // ms
-  lastTimestamp: number;  // ms
+  firstTimestamp: number;
+  lastTimestamp: number;
   marketTitle?: string;
   eventSlug?: string;
   icon?: string;
@@ -67,7 +91,7 @@ export interface AssetBucket {
 }
 
 export interface EventBucket {
-  eventKey: string;        // eventSlug or conditionId fallback
+  eventKey: string;
   eventTitle?: string;
   cashIn: number;
   cashOut: number;
@@ -78,16 +102,24 @@ export interface EventBucket {
   conversionsCount: number;
   rewardsTotal: number;
   conditionIds: Set<string>;
+  // Filled in once /positions data is folded in.
+  openCostBasis: number;
+  openCurrentValue: number;
+  unrealizedPnL: number;
+  realizedPnL: number;
+  fullyClosed: boolean;
 }
 
 export interface LedgerSummary {
   totalRealizedPnL: number;
-  totalCashIn: number;
-  totalCashOut: number;
-  totalRewards: number;
+  totalUnrealizedPnL: number;
+  totalCashflow: number;       // cashIn - cashOut across all events
+  totalOpenCostBasis: number;
+  globalRewards: number;       // rewards/yield with no event attribution
+  totalRewards: number;        // including event-attributed rewards
   rowsProcessed: number;
   rowsByType: Record<string, number>;
-  rowsSkipped: number; // malformed / unknown types
+  rowsSkipped: number;
 }
 
 export interface LedgerResult {
@@ -96,13 +128,11 @@ export interface LedgerResult {
   summary: LedgerSummary;
 }
 
-const REWARD_TYPES = new Set(['REWARD', 'MAKER_REBATE', 'REFERRAL_REWARD']);
+const REWARD_TYPES = new Set(['REWARD', 'MAKER_REBATE', 'REFERRAL_REWARD', 'YIELD']);
 
 function tsToMs(ts: number | string | undefined): number {
   if (ts == null) return 0;
-  if (typeof ts === 'number') {
-    return ts < 1e12 ? ts * 1000 : ts;
-  }
+  if (typeof ts === 'number') return ts < 1e12 ? ts * 1000 : ts;
   const ms = new Date(ts).getTime();
   return Number.isFinite(ms) ? ms : 0;
 }
@@ -146,23 +176,47 @@ function ensureEvent(map: Map<string, EventBucket>, key: string, seed: Partial<E
     conversionsCount: 0,
     rewardsTotal: 0,
     conditionIds: new Set(),
+    openCostBasis: 0,
+    openCurrentValue: 0,
+    unrealizedPnL: 0,
+    realizedPnL: 0,
+    fullyClosed: true,
   };
   map.set(key, fresh);
   return fresh;
 }
 
-export function buildLedger(rows: RawActivity[]): LedgerResult {
+export interface BuildLedgerOptions {
+  /** Open positions from /positions, used to subtract still-deployed cost basis from "realized PnL". */
+  openPositions?: LedgerOpenPosition[];
+}
+
+export function buildLedger(rows: RawActivity[], opts: BuildLedgerOptions = {}): LedgerResult {
   const byAsset = new Map<string, AssetBucket>();
   const byEvent = new Map<string, EventBucket>();
   const summary: LedgerSummary = {
     totalRealizedPnL: 0,
-    totalCashIn: 0,
-    totalCashOut: 0,
+    totalUnrealizedPnL: 0,
+    totalCashflow: 0,
+    totalOpenCostBasis: 0,
+    globalRewards: 0,
     totalRewards: 0,
     rowsProcessed: 0,
     rowsByType: {},
     rowsSkipped: 0,
   };
+
+  // Pre-index open positions by conditionId so we can attribute open cost basis
+  // back to events even when /activity SPLIT/MERGE rows don't carry the asset.
+  const openByConditionId = new Map<string, LedgerOpenPosition[]>();
+  if (opts.openPositions) {
+    for (const p of opts.openPositions) {
+      if (!p.conditionId || !(p.size > 0)) continue;
+      const arr = openByConditionId.get(p.conditionId) ?? [];
+      arr.push(p);
+      openByConditionId.set(p.conditionId, arr);
+    }
+  }
 
   for (const row of rows) {
     if (!row || typeof row !== 'object') {
@@ -226,7 +280,6 @@ export function buildLedger(rows: RawActivity[]): LedgerResult {
       }
 
       case 'SPLIT': {
-        // User pays USDC, receives YES+NO pair. Asset is typically empty.
         if (eventBucket) {
           eventBucket.cashOut += usdc;
           eventBucket.splitsCount++;
@@ -235,7 +288,6 @@ export function buildLedger(rows: RawActivity[]): LedgerResult {
       }
 
       case 'MERGE': {
-        // User burns YES+NO pair, gets USDC. Asset is typically empty.
         if (eventBucket) {
           eventBucket.cashIn += usdc;
           eventBucket.mergesCount++;
@@ -258,11 +310,6 @@ export function buildLedger(rows: RawActivity[]): LedgerResult {
       }
 
       case 'CONVERSION': {
-        // NegRiskAdapter pays USDC; token transfers are internal to the
-        // event and net out at event scope. Asset-level attribution would
-        // require parsing onchain logs, which we skip — the asset-level
-        // PnL for NegRisk events is approximate; the event-level number
-        // is exact.
         if (eventBucket) {
           eventBucket.cashIn += usdc;
           eventBucket.conversionsCount++;
@@ -272,48 +319,87 @@ export function buildLedger(rows: RawActivity[]): LedgerResult {
 
       case 'REWARD':
       case 'MAKER_REBATE':
-      case 'REFERRAL_REWARD': {
+      case 'REFERRAL_REWARD':
+      case 'YIELD': {
         summary.totalRewards += usdc;
         if (eventBucket) {
           eventBucket.cashIn += usdc;
           eventBucket.rewardsTotal += usdc;
+        } else {
+          // Wallet-level reward (no event attribution) — held in a global
+          // bucket and added to total realized at the end.
+          summary.globalRewards += usdc;
         }
         break;
       }
 
       default: {
-        // Unknown type — count it but don't post to ledger.
         summary.rowsSkipped++;
         break;
       }
     }
   }
 
-  // Realized PnL totals
-  for (const a of byAsset.values()) {
-    summary.totalCashIn += a.cashIn;
-    summary.totalCashOut += a.cashOut;
-  }
-  // Add event-level totals that aren't asset-attributable (SPLIT/MERGE/CONVERSION).
-  // Avoid double-counting trades/redeems already in asset totals.
+  // Fold open positions into events: subtract still-deployed cost basis from
+  // realized PnL, and surface unrealized PnL.
   for (const e of byEvent.values()) {
-    const tradeRedeemSpread = 0; // placeholder if we later split out
-    // We don't add event cash to totals since asset cash is the source of truth
-    // for trade+redeem; event-only flows (split/merge/conversion/reward) need a
-    // separate accumulation.
-    void tradeRedeemSpread;
+    let openCostBasis = 0;
+    let openCurrentValue = 0;
+    let openUnrealized = 0;
+    let hasOpen = false;
+
+    for (const cId of e.conditionIds) {
+      const positions = openByConditionId.get(cId);
+      if (!positions) continue;
+      for (const p of positions) {
+        hasOpen = true;
+        openCostBasis += p.size * p.avgPrice;
+        openCurrentValue += p.currentValue || 0;
+        openUnrealized += p.cashPnl || 0;
+      }
+    }
+
+    e.openCostBasis = openCostBasis;
+    e.openCurrentValue = openCurrentValue;
+    e.unrealizedPnL = openUnrealized;
+    e.fullyClosed = !hasOpen;
+    // Realized = cashflow + cost basis of still-deployed capital.
+    e.realizedPnL = (e.cashIn - e.cashOut) + openCostBasis;
   }
-  // Net: total realized PnL = sum across events (cashIn - cashOut), since events
-  // capture every flow we attribute. Use event totals as the authoritative number.
-  let eventNet = 0;
-  for (const e of byEvent.values()) eventNet += e.cashIn - e.cashOut;
-  // Add unattributed rewards (no event/conditionId) from the running total —
-  // those are already captured per-event when conditionId was present, but if
-  // conditionId is missing we still want them in the grand total.
-  let attributedRewards = 0;
-  for (const e of byEvent.values()) attributedRewards += e.rewardsTotal;
-  const unattributedRewards = Math.max(0, summary.totalRewards - attributedRewards);
-  summary.totalRealizedPnL = eventNet + unattributedRewards;
+
+  // Account for open positions in events that had no /activity rows but appear
+  // in /positions (rare — but possible if user only bought via SPLIT etc.).
+  if (opts.openPositions) {
+    const seenEvents = new Set(byEvent.keys());
+    for (const p of opts.openPositions) {
+      if (!p.size) continue;
+      const key = p.eventSlug || p.conditionId || '';
+      if (!key || seenEvents.has(key)) continue;
+      const e = ensureEvent(byEvent, key, { eventTitle: p.title });
+      e.openCostBasis = p.size * p.avgPrice;
+      e.openCurrentValue = p.currentValue || 0;
+      e.unrealizedPnL = p.cashPnl || 0;
+      e.fullyClosed = false;
+      e.realizedPnL = e.openCostBasis; // cashflow is 0; realized is just cost-basis offset (=0 net)
+    }
+  }
+
+  // Roll up totals.
+  let totalCashflow = 0;
+  let totalOpenCostBasis = 0;
+  let totalUnrealized = 0;
+  let eventRealizedSum = 0;
+  for (const e of byEvent.values()) {
+    totalCashflow += e.cashIn - e.cashOut;
+    totalOpenCostBasis += e.openCostBasis;
+    totalUnrealized += e.unrealizedPnL;
+    eventRealizedSum += e.realizedPnL;
+  }
+  summary.totalCashflow = totalCashflow;
+  summary.totalOpenCostBasis = totalOpenCostBasis;
+  summary.totalUnrealizedPnL = totalUnrealized;
+  // Realized = sum of per-event realized + global rewards (wallet-level rebates).
+  summary.totalRealizedPnL = eventRealizedSum + summary.globalRewards;
 
   return {
     byAsset: Array.from(byAsset.values()),
@@ -322,16 +408,10 @@ export function buildLedger(rows: RawActivity[]): LedgerResult {
   };
 }
 
-/**
- * Compute realized PnL per asset = cashIn - cashOut. For OPEN positions
- * (tokensIn > tokensOut), that number understates true PnL because the
- * remaining tokens haven't been monetized yet. Caller is expected to layer
- * mark-to-market unrealized PnL from /positions on top.
- */
 export function realizedPnLForAsset(a: AssetBucket): number {
   return a.cashIn - a.cashOut;
 }
 
 export function realizedPnLForEvent(e: EventBucket): number {
-  return e.cashIn - e.cashOut;
+  return e.realizedPnL;
 }

@@ -222,7 +222,10 @@ export interface LedgerEventRow {
   eventTitle?: string;
   cashIn: number;
   cashOut: number;
-  realizedPnL: number;
+  realizedPnL: number;       // (cashIn - cashOut) + openCostBasis
+  unrealizedPnL: number;     // mark-to-market of remaining open tokens in this event
+  openCostBasis: number;     // capital still deployed in event (size * avgPrice for open assets)
+  fullyClosed: boolean;
   tradesCount: number;
   splitsCount: number;
   mergesCount: number;
@@ -233,8 +236,10 @@ export interface LedgerEventRow {
 
 export interface LedgerSummaryShape {
   totalRealizedPnL: number;
-  totalCashIn: number;
-  totalCashOut: number;
+  totalUnrealizedPnL: number;
+  totalCashflow: number;
+  totalOpenCostBasis: number;
+  globalRewards: number;
   totalRewards: number;
   rowsProcessed: number;
   rowsByType: Record<string, number>;
