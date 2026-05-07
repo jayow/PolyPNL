@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActivity, fetchAllUserActivity, normalizeTrade, enrichTradesWithMetadata, fetchMarketMetadata, fetchOpenPositions } from '@/lib/api-client';
+import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActivity, fetchAllUserActivity, normalizeTrade, enrichTradesWithMetadata, fetchMarketMetadata } from '@/lib/api-client';
 import { FIFOPnLEngine } from '@/lib/pnl-engine';
-import { buildLedger, realizedPnLForEvent } from '@/lib/ledger-pnl';
 import { ClosedPosition, PositionSummary } from '@/types';
 import { pnlQuerySchema, validateQueryParams } from '@/lib/validation';
 import { pnlRateLimiter, getClientIP, checkRateLimit, createRateLimitResponse } from '@/lib/rate-limit';
@@ -281,56 +280,30 @@ export async function GET(request: NextRequest) {
     // Calculate summary statistics
     const summary = calculateSummary(closedPositions);
 
-    // Cash-flow ledger over /activity — accurate for NegRisk because event-level
-    // cashIn-cashOut captures conversions correctly. Runs in parallel with the
-    // closed-positions path; failures are non-fatal and we still return the
-    // existing per-position data unchanged.
-    //
-    // We also pass in /positions so the ledger can subtract still-deployed cost
-    // basis from "realized PnL" — without that, every buy on a still-open
-    // position gets booked as a loss.
-    let ledger = null as null | ReturnType<typeof buildLedger>;
+    // Pull /activity for rewards / yield / rebates, which the per-position
+    // closed-positions API doesn't include but are real wallet income. We
+    // surface these as a separate, additive line — never as a competing
+    // realized-PnL figure. The ledger machinery is also used internally to
+    // verify NegRisk events but no longer drives any user-facing total.
+    let rewardsBreakdown: { total: number; byType: Record<string, number> } | null = null;
     try {
-      console.log(`[API /pnl] Fetching full activity history + open positions for ledger PnL...`);
-      const [activity, openPositionsForLedger] = await Promise.all([
-        fetchAllUserActivity(userAddress),
-        fetchOpenPositions(userAddress).catch((e) => {
-          console.warn(`[API /pnl] Open positions fetch failed; ledger will overstate realized loss:`, e);
-          return [];
-        }),
-      ]);
-      ledger = buildLedger(activity as any, {
-        openPositions: openPositionsForLedger.map((p) => ({
-          asset: p.asset,
-          conditionId: p.conditionId,
-          size: p.size,
-          avgPrice: p.avgPrice,
-          initialValue: p.initialValue,
-          currentValue: p.currentValue,
-          cashPnl: p.unrealizedPnL,
-          eventSlug: p.eventSlug,
-          title: p.marketTitle,
-        })),
-      });
-      console.log(`[API /pnl] Ledger built: ${ledger.summary.rowsProcessed} rows, realized=${ledger.summary.totalRealizedPnL.toFixed(2)}, unrealized=${ledger.summary.totalUnrealizedPnL.toFixed(2)}, openCostBasis=${ledger.summary.totalOpenCostBasis.toFixed(2)}`);
-    } catch (ledgerErr) {
-      console.warn(`[API /pnl] Ledger build failed:`, ledgerErr);
+      console.log(`[API /pnl] Fetching activity for rewards / yield aggregation...`);
+      const activity = await fetchAllUserActivity(userAddress);
+      const REWARD_TYPES = new Set(['REWARD', 'MAKER_REBATE', 'REFERRAL_REWARD', 'YIELD']);
+      const byType: Record<string, number> = {};
+      let total = 0;
+      for (const row of activity as any[]) {
+        const type = (row.type || '').toUpperCase();
+        if (!REWARD_TYPES.has(type)) continue;
+        const usdc = typeof row.usdcSize === 'number' ? row.usdcSize : 0;
+        byType[type] = (byType[type] || 0) + usdc;
+        total += usdc;
+      }
+      rewardsBreakdown = { total, byType };
+      console.log(`[API /pnl] Rewards aggregate: $${total.toFixed(2)} across types ${JSON.stringify(byType)}`);
+    } catch (err) {
+      console.warn(`[API /pnl] Rewards aggregation failed (non-fatal):`, err);
     }
-
-    // Cross-validate ledger vs Polymarket's per-position realizedPnl total.
-    const positionsRealizedTotal = closedPositions.reduce((s, p) => s + p.realizedPnL, 0);
-    const validation = ledger
-      ? {
-          ledgerRealizedPnL: ledger.summary.totalRealizedPnL,
-          polymarketRealizedPnL: positionsRealizedTotal,
-          diff: ledger.summary.totalRealizedPnL - positionsRealizedTotal,
-          // Anything bigger than $1 of asymmetry is worth flagging — usually a
-          // NegRisk conversion or a missed reward.
-          significantDiff: Math.abs(ledger.summary.totalRealizedPnL - positionsRealizedTotal) > 1,
-          rowsProcessed: ledger.summary.rowsProcessed,
-          rowsByType: ledger.summary.rowsByType,
-        }
-      : null;
 
     return NextResponse.json({
       positions: closedPositions,
@@ -338,30 +311,7 @@ export async function GET(request: NextRequest) {
       resolveResult,
       tradesCount: tradesCount || closedPositions.length,
       method: closedPositions.length > 0 && tradesCount === 0 ? 'api' : method, // Mark if using API
-      ledger: ledger
-        ? {
-            summary: ledger.summary,
-            // Only ship event-level rollups to the client (asset rollups are
-            // larger and not used by the UI today).
-            byEvent: ledger.byEvent.map((e) => ({
-              eventKey: e.eventKey,
-              eventTitle: e.eventTitle,
-              cashIn: e.cashIn,
-              cashOut: e.cashOut,
-              realizedPnL: realizedPnLForEvent(e),
-              unrealizedPnL: e.unrealizedPnL,
-              openCostBasis: e.openCostBasis,
-              fullyClosed: e.fullyClosed,
-              tradesCount: e.tradesCount,
-              splitsCount: e.splitsCount,
-              mergesCount: e.mergesCount,
-              redemptionsCount: e.redemptionsCount,
-              conversionsCount: e.conversionsCount,
-              rewardsTotal: e.rewardsTotal,
-            })),
-          }
-        : null,
-      validation,
+      rewards: rewardsBreakdown,
     });
   } catch (error) {
     console.error('Error in /api/pnl:', error);

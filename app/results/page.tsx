@@ -2,11 +2,11 @@
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ClosedPosition, PositionSummary, ProxyWalletResponse, OpenPosition, OpenPositionsSummary, NegRiskActivity, LedgerSummaryShape, LedgerEventRow, PnLValidation } from '@/types';
+import { ClosedPosition, PositionSummary, ProxyWalletResponse, OpenPosition, OpenPositionsSummary, NegRiskActivity } from '@/types';
 import OpenPositions from '@/components/OpenPositions';
 import NegRiskEventSummary from '@/components/NegRiskEventSummary';
 import ConversionsPanel from '@/components/ConversionsPanel';
-import AccuracyPanel from '@/components/AccuracyPanel';
+import WalletIncomePanel from '@/components/WalletIncomePanel';
 import { formatPositionLabel, sideBadgeClasses } from '@/lib/position-display';
 import { collateralAtTimestamp, collateralMix } from '@/lib/collateral';
 
@@ -28,8 +28,7 @@ function ResultsContent() {
   const [conversions, setConversions] = useState<NegRiskActivity[]>([]);
   const [conversionsLoading, setConversionsLoading] = useState(false);
   const [conversionsError, setConversionsError] = useState<string | null>(null);
-  const [ledger, setLedger] = useState<{ summary: LedgerSummaryShape; byEvent: LedgerEventRow[] } | null>(null);
-  const [validation, setValidation] = useState<PnLValidation | null>(null);
+  const [rewards, setRewards] = useState<{ total: number; byType: Record<string, number> } | null>(null);
 
   const wallet = searchParams.get('wallet') || '';
   const start = searchParams.get('start') || '';
@@ -139,8 +138,7 @@ function ResultsContent() {
       setPositions(data.positions || []);
       setSummary(data.summary || null);
       setResolveResult(data.resolveResult || null);
-      setLedger(data.ledger || null);
-      setValidation(data.validation || null);
+      setRewards(data.rewards || null);
       
       // Log result for debugging
       console.log('[Frontend] PnL data received:', {
@@ -338,8 +336,12 @@ function ResultsContent() {
           )}
         </div>
 
-        {/* Accuracy: cash-flow ledger vs Polymarket per-position number */}
-        <AccuracyPanel ledger={ledger} validation={validation} />
+        {/* Wallet income: realized + unrealized + rewards, each from one Polymarket endpoint */}
+        <WalletIncomePanel
+          realizedSummary={summary}
+          openSummary={openSummary}
+          rewards={rewards}
+        />
 
         {/* Open Positions (Unrealized PnL) */}
         <OpenPositions
@@ -350,9 +352,7 @@ function ResultsContent() {
         />
 
         {/* NegRisk Event Roll-Up */}
-        {positions.length > 0 && (
-          <NegRiskEventSummary positions={positions} ledgerByEvent={ledger?.byEvent ?? null} />
-        )}
+        {positions.length > 0 && <NegRiskEventSummary positions={positions} />}
 
         {/* Conditional-token activity (NegRisk conversions, redemptions) */}
         <ConversionsPanel
@@ -365,12 +365,9 @@ function ResultsContent() {
         {summary && positions.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
             <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-              <div className="text-sm text-gray-400 mb-1 flex items-center gap-2">
-                Total Realized PnL
-                {ledger && <span className="px-1.5 py-0.5 text-[9px] font-semibold bg-green-900/50 text-green-300 rounded uppercase tracking-wide" title="Computed from raw activity ledger (NegRisk-correct)">Ledger</span>}
-              </div>
-              <div className={`text-2xl font-bold ${(ledger?.summary.totalRealizedPnL ?? summary.totalRealizedPnL) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                ${(ledger?.summary.totalRealizedPnL ?? summary.totalRealizedPnL).toFixed(2)}
+              <div className="text-sm text-gray-400 mb-1">Total Realized PnL</div>
+              <div className={`text-2xl font-bold ${summary.totalRealizedPnL >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                ${summary.totalRealizedPnL.toFixed(2)}
               </div>
             </div>
             

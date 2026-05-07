@@ -1,17 +1,12 @@
 'use client';
 
-import { ClosedPosition, LedgerEventRow } from '@/types';
+import { ClosedPosition } from '@/types';
 
 interface EventGroup {
   eventKey: string;
   eventTitle: string;
   positionsCount: number;
-  totalRealizedPnL: number;       // NegRisk-correct when ledger event row is present
-  positionSumRealizedPnL: number; // Naive sum of per-candidate Polymarket numbers
-  ledgerSourced: boolean;
-  conversionsCount: number;
-  redemptionsCount: number;
-  rewardsTotal: number;
+  totalRealizedPnL: number;
   wins: number;
   losses: number;
   winRate: number;
@@ -26,17 +21,9 @@ interface EventGroup {
 
 interface Props {
   positions: ClosedPosition[];
-  ledgerByEvent?: LedgerEventRow[] | null;
 }
 
-export function groupNegRiskPositionsByEvent(
-  positions: ClosedPosition[],
-  ledgerByEvent?: LedgerEventRow[] | null
-): EventGroup[] {
-  const ledgerLookup = new Map<string, LedgerEventRow>();
-  if (ledgerByEvent) {
-    for (const row of ledgerByEvent) ledgerLookup.set(row.eventKey, row);
-  }
+export function groupNegRiskPositionsByEvent(positions: ClosedPosition[]): EventGroup[] {
 
   const groups = new Map<string, EventGroup>();
 
@@ -51,11 +38,6 @@ export function groupNegRiskPositionsByEvent(
         eventTitle: pos.eventTitle || pos.eventSlug || 'NegRisk event',
         positionsCount: 0,
         totalRealizedPnL: 0,
-        positionSumRealizedPnL: 0,
-        ledgerSourced: false,
-        conversionsCount: 0,
-        redemptionsCount: 0,
-        rewardsTotal: 0,
         wins: 0,
         losses: 0,
         winRate: 0,
@@ -67,7 +49,7 @@ export function groupNegRiskPositionsByEvent(
 
     const g = groups.get(key)!;
     g.positionsCount++;
-    g.positionSumRealizedPnL += pos.realizedPnL;
+    g.totalRealizedPnL += pos.realizedPnL;
     if (pos.realizedPnL > 0) g.wins++;
     else if (pos.realizedPnL < 0) g.losses++;
     g.biggestWin = Math.max(g.biggestWin, pos.realizedPnL);
@@ -80,17 +62,6 @@ export function groupNegRiskPositionsByEvent(
   }
 
   for (const g of groups.values()) {
-    // Prefer the ledger event total when we have it — it's NegRisk-correct.
-    const ledgerRow = ledgerLookup.get(g.eventKey);
-    if (ledgerRow) {
-      g.totalRealizedPnL = ledgerRow.realizedPnL;
-      g.ledgerSourced = true;
-      g.conversionsCount = ledgerRow.conversionsCount;
-      g.redemptionsCount = ledgerRow.redemptionsCount;
-      g.rewardsTotal = ledgerRow.rewardsTotal;
-    } else {
-      g.totalRealizedPnL = g.positionSumRealizedPnL;
-    }
     const decided = g.wins + g.losses;
     g.winRate = decided > 0 ? (g.wins / decided) * 100 : 0;
     g.candidates.sort((a, b) => b.pnl - a.pnl);
@@ -99,8 +70,8 @@ export function groupNegRiskPositionsByEvent(
   return Array.from(groups.values()).sort((a, b) => b.totalRealizedPnL - a.totalRealizedPnL);
 }
 
-export default function NegRiskEventSummary({ positions, ledgerByEvent }: Props) {
-  const groups = groupNegRiskPositionsByEvent(positions, ledgerByEvent ?? null);
+export default function NegRiskEventSummary({ positions }: Props) {
+  const groups = groupNegRiskPositionsByEvent(positions);
   if (groups.length === 0) return null;
 
   return (
@@ -119,11 +90,6 @@ export default function NegRiskEventSummary({ positions, ledgerByEvent }: Props)
                 <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-900/50 text-amber-300 rounded uppercase tracking-wide">
                   NegRisk
                 </span>
-                {g.ledgerSourced && (
-                  <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-green-900/50 text-green-300 rounded uppercase tracking-wide" title="Total computed from on-chain activity ledger">
-                    Verified
-                  </span>
-                )}
                 <span className="text-sm text-white truncate">{g.eventTitle}</span>
                 <span className="text-xs text-gray-400 shrink-0">
                   {g.positionsCount} candidate{g.positionsCount === 1 ? '' : 's'}
@@ -145,18 +111,6 @@ export default function NegRiskEventSummary({ positions, ledgerByEvent }: Props)
                 <Stat label="Biggest loss" value={`$${g.biggestLoss.toFixed(2)}`} tone="negative" />
               </div>
 
-              {g.ledgerSourced && (g.conversionsCount > 0 || g.redemptionsCount > 0 || g.rewardsTotal > 0) && (
-                <div className="text-xs text-gray-400 mb-3 flex flex-wrap gap-3">
-                  {g.conversionsCount > 0 && <span>{g.conversionsCount} conversion{g.conversionsCount === 1 ? '' : 's'}</span>}
-                  {g.redemptionsCount > 0 && <span>{g.redemptionsCount} redemption{g.redemptionsCount === 1 ? '' : 's'}</span>}
-                  {g.rewardsTotal > 0 && <span>Rewards <span className="text-green-300">${g.rewardsTotal.toFixed(2)}</span></span>}
-                  {Math.abs(g.totalRealizedPnL - g.positionSumRealizedPnL) > 1 && (
-                    <span className="text-amber-300">
-                      Per-candidate sum (${g.positionSumRealizedPnL.toFixed(2)}) differs from ledger by ${(g.totalRealizedPnL - g.positionSumRealizedPnL).toFixed(2)}
-                    </span>
-                  )}
-                </div>
-              )}
 
               <div className="bg-gray-900/40 rounded p-3">
                 <div className="text-xs text-gray-400 mb-2 uppercase tracking-wide">Candidate breakdown</div>
