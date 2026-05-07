@@ -151,11 +151,12 @@ export async function GET(request: NextRequest) {
           closedPositions = closedPositions.map(pos => {
             const metadata = categoryMap.get(pos.conditionId);
             // Always use markets API metadata, ignore closed-positions API category/tags
-            if (metadata && (metadata.category || metadata.tags)) {
+            if (metadata && (metadata.category || metadata.tags || metadata.negRisk !== undefined)) {
               return {
                 ...pos,
                 category: metadata.category,
                 tags: metadata.tags && metadata.tags.length > 0 ? metadata.tags : (metadata.category ? [metadata.category] : undefined),
+                negRisk: metadata.negRisk ?? pos.negRisk,
               };
             }
             // If no metadata found, remove category/tags from closed-positions API

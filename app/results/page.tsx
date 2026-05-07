@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ClosedPosition, PositionSummary, ProxyWalletResponse } from '@/types';
+import { ClosedPosition, PositionSummary, ProxyWalletResponse, OpenPosition, OpenPositionsSummary } from '@/types';
+import OpenPositions from '@/components/OpenPositions';
 
 function ResultsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  
+
   const [positions, setPositions] = useState<ClosedPosition[]>([]);
   const [summary, setSummary] = useState<PositionSummary | null>(null);
   const [resolveResult, setResolveResult] = useState<ProxyWalletResponse | null>(null);
@@ -15,6 +16,10 @@ function ResultsContent() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [pnlFilter, setPnlFilter] = useState<'all' | 'positive' | 'negative'>('all');
+  const [openPositions, setOpenPositions] = useState<OpenPosition[]>([]);
+  const [openSummary, setOpenSummary] = useState<OpenPositionsSummary | null>(null);
+  const [openLoading, setOpenLoading] = useState(false);
+  const [openError, setOpenError] = useState<string | null>(null);
 
   const wallet = searchParams.get('wallet') || '';
   const start = searchParams.get('start') || '';
@@ -27,8 +32,42 @@ function ResultsContent() {
     }
 
     fetchPnL();
+    fetchOpenPositions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet, start, end]);
+
+  const fetchOpenPositions = async () => {
+    setOpenLoading(true);
+    setOpenError(null);
+    try {
+      const params = new URLSearchParams({ wallet });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch(`/api/positions?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(errorData.error || errorData.details || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      setOpenPositions(data.positions || []);
+      setOpenSummary(data.summary || null);
+    } catch (err) {
+      // Open-positions failures are non-fatal: the closed-PnL view should still render.
+      const message = err instanceof Error
+        ? (err.name === 'AbortError' ? 'Request timed out' : err.message)
+        : 'Unknown error';
+      setOpenError(message);
+      console.warn('[Frontend] Open positions fetch failed:', err);
+    } finally {
+      setOpenLoading(false);
+    }
+  };
 
   const fetchPnL = async () => {
     setLoading(true);
@@ -244,6 +283,14 @@ function ResultsContent() {
           )}
         </div>
 
+        {/* Open Positions (Unrealized PnL) */}
+        <OpenPositions
+          positions={openPositions}
+          summary={openSummary}
+          loading={openLoading}
+          error={openError}
+        />
+
         {/* Summary Stats */}
         {summary && positions.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
@@ -360,7 +407,14 @@ function ResultsContent() {
                         {pos.eventTitle || '-'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-300 max-w-xs truncate">
-                        {pos.marketTitle || '-'}
+                        <div className="flex items-center gap-2">
+                          <span className="truncate">{pos.marketTitle || '-'}</span>
+                          {pos.negRisk && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-900/50 text-amber-300 rounded uppercase tracking-wide" title="Multi-outcome (NegRisk) market">
+                              NegRisk
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         {pos.outcomeName || pos.outcome}

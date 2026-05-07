@@ -1,4 +1,4 @@
-import { PolymarketPublicProfile, PolymarketTrade, NormalizedTrade, MarketMetadata, PolymarketClosedPosition, ClosedPosition } from '@/types';
+import { PolymarketPublicProfile, PolymarketTrade, NormalizedTrade, MarketMetadata, PolymarketClosedPosition, ClosedPosition, PolymarketOpenPosition, OpenPosition } from '@/types';
 
 const GAMMA_API_BASE = 'https://gamma-api.polymarket.com';
 const DATA_API_BASE = 'https://data-api.polymarket.com';
@@ -1554,12 +1554,15 @@ export async function fetchMarketMetadata(
           console.log(`[fetchMarketMetadata] Extracted for ${conditionId}: category=${category}, tags=${JSON.stringify(tags)}`);
         }
         
+        const negRisk = market.negRisk === true || market.event?.negRisk === true || undefined;
+
         const metadata: MarketMetadata = {
           eventTitle: market.event?.title || market.eventTitle,
           marketTitle: market.question || market.title || market.marketTitle,
           outcomeName: outcome ? market.outcomes?.[parseInt(outcome)]?.name : undefined,
           category,
           tags,
+          negRisk,
         };
 
         marketMetadataCache.set(cacheKey, metadata);
@@ -1613,6 +1616,99 @@ export async function enrichTradesWithMetadata(trades: NormalizedTrade[]): Promi
     return trade;
   });
 }
+/**
+ * Fetch the user's open positions from Polymarket's Data API.
+ * Returns each currently-held position with current price, unrealized PnL,
+ * and accrued realized PnL on that position.
+ *
+ * Endpoint: GET https://data-api.polymarket.com/positions?user=<addr>
+ */
+export async function fetchOpenPositions(userAddress: string): Promise<OpenPosition[]> {
+  const allPositions: OpenPosition[] = [];
+  let offset = 0;
+  const pageSize = 500;
+  const maxOffset = 1000; // Polymarket data-api offset cap (Aug 26, 2025)
+  const seenAssets = new Set<string>();
+
+  console.log(`[API] Fetching open positions for: ${userAddress}`);
+
+  while (offset <= maxOffset) {
+    try {
+      const params = new URLSearchParams({
+        user: userAddress.toLowerCase(),
+        limit: pageSize.toString(),
+        offset: offset.toString(),
+        sortBy: 'CURRENT',
+        sortDirection: 'DESC',
+      });
+
+      const response = await fetchWithTimeout(
+        `${DATA_API_BASE}/positions?${params.toString()}`,
+        { headers: { 'Accept': 'application/json' } },
+        15000
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => response.statusText);
+        if (allPositions.length === 0) {
+          throw new Error(`Failed to fetch open positions: ${response.status} ${errorText}`);
+        }
+        console.warn(`[API] /positions failed at offset ${offset}: ${response.status}`);
+        break;
+      }
+
+      const data: PolymarketOpenPosition[] = await response.json();
+      if (!Array.isArray(data) || data.length === 0) break;
+
+      for (const pos of data) {
+        // Some entries can come back with size 0 (fully closed). Skip those.
+        if (!pos || !pos.conditionId || (pos.size ?? 0) === 0) continue;
+
+        const dedupKey = `${pos.conditionId}:${pos.asset}`;
+        if (seenAssets.has(dedupKey)) continue;
+        seenAssets.add(dedupKey);
+
+        const outcome = pos.outcome || pos.asset?.split(':')?.[1] || '0';
+        const side: 'Long YES' | 'Long NO' = pos.outcomeIndex === 0 ? 'Long YES' : 'Long NO';
+
+        allPositions.push({
+          conditionId: pos.conditionId,
+          asset: pos.asset,
+          outcome,
+          outcomeName: pos.outcome,
+          side,
+          marketTitle: pos.title,
+          eventSlug: pos.eventSlug,
+          slug: pos.slug,
+          icon: pos.icon,
+          size: pos.size,
+          avgPrice: pos.avgPrice,
+          currentPrice: pos.curPrice,
+          initialValue: pos.initialValue,
+          currentValue: pos.currentValue,
+          unrealizedPnL: pos.cashPnl,
+          unrealizedPnLPercent: pos.percentPnl,
+          realizedPnL: pos.realizedPnl,
+          redeemable: pos.redeemable,
+          mergeable: pos.mergeable,
+          endDate: pos.endDate,
+          negRisk: pos.negRisk,
+        });
+      }
+
+      if (data.length < pageSize) break;
+      offset += pageSize;
+    } catch (error) {
+      console.error(`[API] Error fetching open positions at offset ${offset}:`, error);
+      if (allPositions.length === 0) throw error;
+      break;
+    }
+  }
+
+  console.log(`[API] Total open positions fetched: ${allPositions.length}`);
+  return allPositions;
+}
+
 export async function fetchClosedPositions(
   userAddress: string,
   startDate?: string,
@@ -1729,6 +1825,7 @@ export async function fetchClosedPositions(
           // Don't use category/tags from closed-positions API - will be fetched from markets API
           category: undefined,
           tags: undefined,
+          negRisk: pos.negRisk,
         };
 
         // Filter by date range if provided (client-side filtering)
