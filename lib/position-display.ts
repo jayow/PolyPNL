@@ -3,14 +3,20 @@ import { ClosedPosition, OpenPosition } from '@/types';
 type SideInput = 'Long YES' | 'Long NO';
 
 /**
- * Format a position's side label for display.
+ * Format a position's side label for display. There are three cases:
  *
- * Binary markets ("Will it rain?"): keep the canonical "Long YES" / "Long NO".
+ * 1. Pure Yes/No binary ("Will it rain?", outcome ∈ {Yes, No}):
+ *    show the canonical "Long YES" / "Long NO".
  *
- * Multi-outcome (NegRisk) events ("Who will win the election?"): the
- * underlying market is still binary YES/NO on a specific candidate, but a
- * "Long YES on Trump" is more readable as "Long Trump", and "Long NO on Trump"
- * as "Short Trump". The candidate name is carried on each sub-market's title.
+ * 2. NegRisk multi-outcome event ("Who wins the election?"): each candidate
+ *    sub-market is a binary YES/NO on that candidate, with the candidate name
+ *    in marketTitle. "Long YES on Trump" reads as "Long Trump"; "Long NO on
+ *    Trump" as "Short Trump".
+ *
+ * 3. Non-Yes/No binary outcomes (sports games like "76ers vs. Knicks", where
+ *    Polymarket uses team names directly as outcomes): the user holds tokens
+ *    of one specific outcome. Show "Long {team}" — there's no "Long YES"
+ *    semantic to map onto, the asset itself is the team's token.
  */
 export function formatPositionLabel(pos: {
   side: SideInput;
@@ -18,15 +24,21 @@ export function formatPositionLabel(pos: {
   marketTitle?: string;
   outcomeName?: string;
 }): string {
-  if (!pos.negRisk) return pos.side;
+  // (2) NegRisk: candidate name lives in marketTitle.
+  if (pos.negRisk && pos.marketTitle?.trim()) {
+    const candidate = pos.marketTitle.trim();
+    return pos.side === 'Long YES' ? `Long ${candidate}` : `Short ${candidate}`;
+  }
 
-  // Prefer marketTitle for multi-outcome events (it's the candidate name in
-  // Polymarket's structure). Fall back to outcomeName, then the raw side.
-  const candidate = (pos.marketTitle && pos.marketTitle.trim())
-    || (pos.outcomeName && pos.outcomeName.trim() && !isYesNo(pos.outcomeName) ? pos.outcomeName : '');
-  if (!candidate) return pos.side;
+  // (3) Outcome is a real label (team name, choice, etc.) rather than Yes/No.
+  // The user holds that outcome's token directly; "Long {outcome}" is the
+  // accurate description regardless of which outcomeIndex it sits at upstream.
+  if (pos.outcomeName && !isYesNo(pos.outcomeName)) {
+    return `Long ${pos.outcomeName.trim()}`;
+  }
 
-  return pos.side === 'Long YES' ? `Long ${candidate}` : `Short ${candidate}`;
+  // (1) Pure Yes/No binary — keep canonical labelling.
+  return pos.side;
 }
 
 function isYesNo(s: string): boolean {
