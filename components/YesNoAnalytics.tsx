@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { ClosedPosition } from '@/types';
+import { isBinaryYesNoOutcome } from '@/lib/position-display';
 
 interface YesNoAnalyticsProps {
   positions: ClosedPosition[];
@@ -22,8 +23,13 @@ function formatNumber(num: number, decimals: number = 2): string {
 
 export default function YesNoAnalytics({ positions }: YesNoAnalyticsProps) {
   const analytics = useMemo(() => {
-    const yesPositions = positions.filter(pos => pos.side === 'Long YES');
-    const noPositions = positions.filter(pos => pos.side === 'Long NO');
+    // Only segment by Yes/No when the outcome is literally Yes/No. Sports
+    // games (Knicks vs 76ers) and multi-choice events live at outcomeIndex
+    // 0/1 too but aren't Yes/No bets — including them here would pollute
+    // both buckets with team/candidate positions.
+    const binary = positions.filter(isBinaryYesNoOutcome);
+    const yesPositions = binary.filter(pos => pos.side === 'Long YES');
+    const noPositions = binary.filter(pos => pos.side === 'Long NO');
 
     // YES positions stats
     const yesPnL = yesPositions.reduce((sum, pos) => sum + pos.realizedPnL, 0);

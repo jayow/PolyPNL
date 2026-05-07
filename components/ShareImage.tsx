@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ClosedPosition } from '@/types';
+import { shortOutcomeLabel } from '@/lib/position-display';
 
 interface ShareImageProps {
   position: ClosedPosition;
@@ -56,7 +57,7 @@ export default function ShareImage({ position, showDollarPnL = false, onToggleDo
                 ? 'bg-[#00D26A]/20 text-[#00D26A]' 
                 : 'bg-[#FF4444]/20 text-[#FF4444]'
             }`}>
-              {position.side === 'Long YES' ? 'YES' : 'NO'}
+              {shortOutcomeLabel(position)}
             </span>
           </div>
           <div className="text-base font-semibold leading-tight text-[#E6EDF6] break-words">

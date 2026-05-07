@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActivity, normalizeTrade, enrichTradesWithMetadata, fetchMarketMetadata } from '@/lib/api-client';
+import { resolveProxyWallet, fetchClosedPositions, fetchAllTrades, fetchUserActivity, fetchAllUserActivity, normalizeTrade, enrichTradesWithMetadata, fetchMarketMetadata } from '@/lib/api-client';
 import { FIFOPnLEngine } from '@/lib/pnl-engine';
 import { ClosedPosition, PositionSummary } from '@/types';
 import { pnlQuerySchema, validateQueryParams } from '@/lib/validation';
@@ -151,11 +151,12 @@ export async function GET(request: NextRequest) {
           closedPositions = closedPositions.map(pos => {
             const metadata = categoryMap.get(pos.conditionId);
             // Always use markets API metadata, ignore closed-positions API category/tags
-            if (metadata && (metadata.category || metadata.tags)) {
+            if (metadata && (metadata.category || metadata.tags || metadata.negRisk !== undefined)) {
               return {
                 ...pos,
                 category: metadata.category,
                 tags: metadata.tags && metadata.tags.length > 0 ? metadata.tags : (metadata.category ? [metadata.category] : undefined),
+                negRisk: metadata.negRisk ?? pos.negRisk,
               };
             }
             // If no metadata found, remove category/tags from closed-positions API
@@ -279,12 +280,38 @@ export async function GET(request: NextRequest) {
     // Calculate summary statistics
     const summary = calculateSummary(closedPositions);
 
+    // Pull /activity for rewards / yield / rebates, which the per-position
+    // closed-positions API doesn't include but are real wallet income. We
+    // surface these as a separate, additive line — never as a competing
+    // realized-PnL figure. The ledger machinery is also used internally to
+    // verify NegRisk events but no longer drives any user-facing total.
+    let rewardsBreakdown: { total: number; byType: Record<string, number> } | null = null;
+    try {
+      console.log(`[API /pnl] Fetching activity for rewards / yield aggregation...`);
+      const activity = await fetchAllUserActivity(userAddress);
+      const REWARD_TYPES = new Set(['REWARD', 'MAKER_REBATE', 'REFERRAL_REWARD', 'YIELD']);
+      const byType: Record<string, number> = {};
+      let total = 0;
+      for (const row of activity as any[]) {
+        const type = (row.type || '').toUpperCase();
+        if (!REWARD_TYPES.has(type)) continue;
+        const usdc = typeof row.usdcSize === 'number' ? row.usdcSize : 0;
+        byType[type] = (byType[type] || 0) + usdc;
+        total += usdc;
+      }
+      rewardsBreakdown = { total, byType };
+      console.log(`[API /pnl] Rewards aggregate: $${total.toFixed(2)} across types ${JSON.stringify(byType)}`);
+    } catch (err) {
+      console.warn(`[API /pnl] Rewards aggregation failed (non-fatal):`, err);
+    }
+
     return NextResponse.json({
       positions: closedPositions,
       summary,
       resolveResult,
       tradesCount: tradesCount || closedPositions.length,
       method: closedPositions.length > 0 && tradesCount === 0 ? 'api' : method, // Mark if using API
+      rewards: rewardsBreakdown,
     });
   } catch (error) {
     console.error('Error in /api/pnl:', error);

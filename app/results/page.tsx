@@ -2,12 +2,18 @@
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ClosedPosition, PositionSummary, ProxyWalletResponse } from '@/types';
+import { ClosedPosition, PositionSummary, ProxyWalletResponse, OpenPosition, OpenPositionsSummary, NegRiskActivity } from '@/types';
+import OpenPositions from '@/components/OpenPositions';
+import NegRiskEventSummary from '@/components/NegRiskEventSummary';
+import ConversionsPanel from '@/components/ConversionsPanel';
+import WalletIncomePanel from '@/components/WalletIncomePanel';
+import { formatPositionLabel, sideBadgeClasses } from '@/lib/position-display';
+import { collateralAtTimestamp, collateralMix } from '@/lib/collateral';
 
 function ResultsContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  
+
   const [positions, setPositions] = useState<ClosedPosition[]>([]);
   const [summary, setSummary] = useState<PositionSummary | null>(null);
   const [resolveResult, setResolveResult] = useState<ProxyWalletResponse | null>(null);
@@ -15,6 +21,14 @@ function ResultsContent() {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [pnlFilter, setPnlFilter] = useState<'all' | 'positive' | 'negative'>('all');
+  const [openPositions, setOpenPositions] = useState<OpenPosition[]>([]);
+  const [openSummary, setOpenSummary] = useState<OpenPositionsSummary | null>(null);
+  const [openLoading, setOpenLoading] = useState(false);
+  const [openError, setOpenError] = useState<string | null>(null);
+  const [conversions, setConversions] = useState<NegRiskActivity[]>([]);
+  const [conversionsLoading, setConversionsLoading] = useState(false);
+  const [conversionsError, setConversionsError] = useState<string | null>(null);
+  const [rewards, setRewards] = useState<{ total: number; byType: Record<string, number> } | null>(null);
 
   const wallet = searchParams.get('wallet') || '';
   const start = searchParams.get('start') || '';
@@ -27,8 +41,72 @@ function ResultsContent() {
     }
 
     fetchPnL();
+    fetchOpenPositions();
+    fetchConversions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet, start, end]);
+
+  const fetchConversions = async () => {
+    setConversionsLoading(true);
+    setConversionsError(null);
+    try {
+      const params = new URLSearchParams({ wallet });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const response = await fetch(`/api/conversions?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(errorData.error || errorData.details || `HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      setConversions(data.activities || []);
+    } catch (err) {
+      // Conversion data is supplementary; failure is silent.
+      const message = err instanceof Error
+        ? (err.name === 'AbortError' ? 'Request timed out' : err.message)
+        : 'Unknown error';
+      setConversionsError(message);
+      console.warn('[Frontend] Conversions fetch failed:', err);
+    } finally {
+      setConversionsLoading(false);
+    }
+  };
+
+  const fetchOpenPositions = async () => {
+    setOpenLoading(true);
+    setOpenError(null);
+    try {
+      const params = new URLSearchParams({ wallet });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch(`/api/positions?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(errorData.error || errorData.details || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      setOpenPositions(data.positions || []);
+      setOpenSummary(data.summary || null);
+    } catch (err) {
+      // Open-positions failures are non-fatal: the closed-PnL view should still render.
+      const message = err instanceof Error
+        ? (err.name === 'AbortError' ? 'Request timed out' : err.message)
+        : 'Unknown error';
+      setOpenError(message);
+      console.warn('[Frontend] Open positions fetch failed:', err);
+    } finally {
+      setOpenLoading(false);
+    }
+  };
 
   const fetchPnL = async () => {
     setLoading(true);
@@ -60,6 +138,7 @@ function ResultsContent() {
       setPositions(data.positions || []);
       setSummary(data.summary || null);
       setResolveResult(data.resolveResult || null);
+      setRewards(data.rewards || null);
       
       // Log result for debugging
       console.log('[Frontend] PnL data received:', {
@@ -109,7 +188,8 @@ function ResultsContent() {
       'Event Title',
       'Market Title',
       'Outcome',
-      'Side',
+      'Position',           // Human-readable label (e.g. "Long Knicks", "Long YES")
+      'Side (raw)',         // Internal direction tag, kept for compatibility
       'Opened At',
       'Closed At',
       'Entry VWAP',
@@ -124,6 +204,7 @@ function ResultsContent() {
       pos.eventTitle || '',
       pos.marketTitle || '',
       pos.outcomeName || pos.outcome,
+      formatPositionLabel(pos),
       pos.side,
       pos.openedAt,
       pos.closedAt || '',
@@ -221,6 +302,19 @@ function ResultsContent() {
             </div>
           )}
 
+          {(() => {
+            if (positions.length === 0) return null;
+            const mix = collateralMix(positions.map((p) => p.closedAt ?? p.openedAt));
+            if (!mix.mixed) return null;
+            return (
+              <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-3 mb-4 text-xs text-gray-400">
+                Collateral note: this wallet&apos;s history straddles the Apr 28 2026 CLOB V2 migration.
+                Trades closed before then settled in <span className="text-gray-200">USDC.e</span> ({mix.USDCeCount}),
+                trades after settled in <span className="text-gray-200">pUSD</span> ({mix.pUSDCount}). Both are 1:1 USD-denominated.
+              </div>
+            );
+          })()}
+
           {positions.length === 0 && !loading && (
             <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-8 text-center">
               <p className="text-xl text-yellow-200 mb-2">No closed positions found</p>
@@ -243,6 +337,31 @@ function ResultsContent() {
             </div>
           )}
         </div>
+
+        {/* Wallet income: realized + unrealized + rewards, each from one Polymarket endpoint */}
+        <WalletIncomePanel
+          realizedSummary={summary}
+          openSummary={openSummary}
+          rewards={rewards}
+        />
+
+        {/* Open Positions (Unrealized PnL) */}
+        <OpenPositions
+          positions={openPositions}
+          summary={openSummary}
+          loading={openLoading}
+          error={openError}
+        />
+
+        {/* NegRisk Event Roll-Up */}
+        {positions.length > 0 && <NegRiskEventSummary positions={positions} />}
+
+        {/* Conditional-token activity (NegRisk conversions, redemptions) */}
+        <ConversionsPanel
+          activities={conversions}
+          loading={conversionsLoading}
+          error={conversionsError}
+        />
 
         {/* Summary Stats */}
         {summary && positions.length > 0 && (
@@ -360,23 +479,35 @@ function ResultsContent() {
                         {pos.eventTitle || '-'}
                       </td>
                       <td className="px-6 py-4 text-sm text-gray-300 max-w-xs truncate">
-                        {pos.marketTitle || '-'}
+                        <div className="flex items-center gap-2">
+                          <span className="truncate">{pos.marketTitle || '-'}</span>
+                          {pos.negRisk && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-amber-900/50 text-amber-300 rounded uppercase tracking-wide" title="Multi-outcome (NegRisk) market">
+                              NegRisk
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                         {pos.outcomeName || pos.outcome}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${
-                          pos.side === 'Long YES' ? 'bg-blue-900/50 text-blue-300' : 'bg-purple-900/50 text-purple-300'
-                        }`}>
-                          {pos.side}
+                        <span className={`px-2 py-1 rounded-full text-xs font-semibold ${sideBadgeClasses(pos.side)}`}>
+                          {formatPositionLabel(pos)}
                         </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                         {new Date(pos.openedAt).toLocaleDateString()}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                        {pos.closedAt ? new Date(pos.closedAt).toLocaleDateString() : '-'}
+                        <div className="flex items-center gap-2">
+                          <span>{pos.closedAt ? new Date(pos.closedAt).toLocaleDateString() : '-'}</span>
+                          {collateralAtTimestamp(pos.closedAt) === 'USDC.e' && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-gray-700 text-gray-300 rounded uppercase tracking-wide" title="Settled pre-CLOB-V2 migration in USDC.e">
+                              USDC.e
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 text-right">
                         {pos.entryVWAP.toFixed(4)}

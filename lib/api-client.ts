@@ -1,4 +1,4 @@
-import { PolymarketPublicProfile, PolymarketTrade, NormalizedTrade, MarketMetadata, PolymarketClosedPosition, ClosedPosition } from '@/types';
+import { PolymarketPublicProfile, PolymarketTrade, NormalizedTrade, MarketMetadata, PolymarketClosedPosition, ClosedPosition, PolymarketOpenPosition, OpenPosition, NegRiskActivity, NegRiskActivityType } from '@/types';
 
 const GAMMA_API_BASE = 'https://gamma-api.polymarket.com';
 const DATA_API_BASE = 'https://data-api.polymarket.com';
@@ -36,9 +36,16 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout:
 }
 
 /**
- * Fetch username and profile details from Polymarket profile page
+ * Fetch username and profile details for a wallet.
+ *
+ * Primary path: Gamma `/public-profile?address=...` — the supported API that
+ * already returns username + profileImage. Most lookups should resolve here.
+ *
+ * Fallback path (when the API has no record yet, e.g. fresh wallets):
+ * scrape polymarket.com/@<address>. The scraping path is fragile and only
+ * runs when the structured API doesn't carry the data we need.
+ *
  * @param address - Wallet address (can be EOA or proxy wallet)
- * @returns Profile information including username
  */
 export async function fetchPolymarketUsername(address: string): Promise<{
   address: string;
@@ -51,8 +58,37 @@ export async function fetchPolymarketUsername(address: string): Promise<{
   const normalizedAddress = address.toLowerCase().trim();
   const profileUrl = `https://polymarket.com/@${normalizedAddress}`;
 
+  // Primary path — Gamma public-profile API.
   try {
-    console.log(`[fetchPolymarketUsername] Fetching profile for: ${normalizedAddress}`);
+    const apiResponse = await fetchWithTimeout(
+      `${GAMMA_API_BASE}/public-profile?address=${encodeURIComponent(normalizedAddress)}`,
+      { headers: { 'Accept': 'application/json' } },
+      8000
+    );
+    if (apiResponse.ok) {
+      const data: PolymarketPublicProfile & Record<string, any> = await apiResponse.json();
+      const username = data?.username || data?.displayName || data?.name || null;
+      const avatarUrl = data?.profileImage || null;
+      const displayName = data?.displayName || data?.name || null;
+      const bio = data?.bio || null;
+      if (username || avatarUrl || displayName || bio) {
+        console.log(`[fetchPolymarketUsername] Resolved via Gamma /public-profile for ${normalizedAddress} (username=${username})`);
+        return {
+          address: normalizedAddress,
+          username,
+          displayName,
+          profileUrl,
+          bio,
+          avatarUrl,
+        };
+      }
+    }
+  } catch (apiError) {
+    console.log(`[fetchPolymarketUsername] Gamma /public-profile lookup failed for ${normalizedAddress}; falling back to scrape:`, apiError);
+  }
+
+  try {
+    console.log(`[fetchPolymarketUsername] Falling back to HTML scrape for: ${normalizedAddress}`);
     
     const response = await fetchWithTimeout(
       profileUrl,
@@ -901,6 +937,73 @@ export async function resolveProxyWalletWithUsername(wallet: string): Promise<{
   };
 }
 
+/**
+ * Fetch ALL activity for a wallet, walking the same date-window strategy as
+ * fetchAllTrades to escape the 1000-offset cap. Used by the cash-flow ledger
+ * to get a complete history (TRADE + SPLIT + MERGE + REDEEM + CONVERSION +
+ * REWARD + MAKER_REBATE + REFERRAL_REWARD).
+ */
+export async function fetchAllUserActivity(
+  userAddress: string,
+  options: {
+    type?: string[];
+    side?: 'BUY' | 'SELL';
+  } = {}
+): Promise<Array<{ timestamp: number; conditionId: string; type: string; [key: string]: any }>> {
+  const all: any[] = [];
+  const seenHashes = new Set<string>();
+  let endTimestampMs: number | undefined = undefined;
+
+  for (let windowIdx = 0; windowIdx < MAX_TRADE_WINDOWS; windowIdx++) {
+    const window = await fetchUserActivity(userAddress, {
+      type: options.type,
+      side: options.side,
+      sortBy: 'TIMESTAMP',
+      sortDirection: 'DESC',
+      limit: TRADES_WINDOW_CAP,
+      // Pass end as a Unix-seconds string; activity API accepts numeric
+      // end/start filters when present, otherwise ignores them silently.
+      end: endTimestampMs != null ? Math.floor(endTimestampMs / 1000) : undefined,
+    });
+
+    if (window.length === 0) break;
+
+    let newCount = 0;
+    let earliestMs = Number.POSITIVE_INFINITY;
+    for (const a of window) {
+      // Dedup by transactionHash + type + asset (best signal we have).
+      const key = `${a.transactionHash || ''}:${a.type}:${a.asset || ''}:${a.timestamp}`;
+      if (seenHashes.has(key)) continue;
+      seenHashes.add(key);
+      all.push(a);
+      newCount++;
+      const tsMs = typeof a.timestamp === 'number'
+        ? (a.timestamp < 1e12 ? a.timestamp * 1000 : a.timestamp)
+        : new Date(a.timestamp).getTime();
+      if (Number.isFinite(tsMs) && tsMs < earliestMs) earliestMs = tsMs;
+    }
+
+    // Cap not hit -> no more older history to fetch.
+    if (window.length < TRADES_WINDOW_CAP) break;
+    if (newCount === 0) break;
+    if (!Number.isFinite(earliestMs)) break;
+
+    // Step end cursor 1s past the earliest record so we don't refetch it.
+    endTimestampMs = earliestMs - 1000;
+    console.log(`[API] Activity window ${windowIdx + 1} saturated (${window.length}); walking back to end=${endTimestampMs}`);
+  }
+
+  // Sort ascending by timestamp for downstream replay.
+  all.sort((a, b) => {
+    const ta = typeof a.timestamp === 'number' ? a.timestamp : new Date(a.timestamp).getTime() / 1000;
+    const tb = typeof b.timestamp === 'number' ? b.timestamp : new Date(b.timestamp).getTime() / 1000;
+    return ta - tb;
+  });
+
+  console.log(`[API] Total activity fetched: ${all.length}`);
+  return all;
+}
+
 export async function fetchUserActivity(
   userAddress: string,
   options: {
@@ -909,6 +1012,8 @@ export async function fetchUserActivity(
     sortBy?: 'TIMESTAMP' | 'TOKENS' | 'CASH';
     sortDirection?: 'ASC' | 'DESC';
     limit?: number;
+    end?: number;   // Unix seconds
+    start?: number; // Unix seconds
   } = {}
 ): Promise<Array<{
   timestamp: number;
@@ -922,11 +1027,13 @@ export async function fetchUserActivity(
   const allActivities: any[] = [];
   let offset = 0;
   const pageSize = Math.min(options.limit || 100, 500); // API max is 500
-  const maxOffset = 10000; // API max offset
+  // Polymarket API hard caps offset at 1000 (Aug 26, 2025 changelog).
+  // With pageSize=500, that means at most 3 calls (offsets 0, 500, 1000) ~ 1500 records.
+  const maxOffset = 1000;
 
   console.log(`[API] Fetching user activity for: ${userAddress}`, options);
 
-  while (offset < maxOffset && (!options.limit || allActivities.length < options.limit)) {
+  while (offset <= maxOffset && (!options.limit || allActivities.length < options.limit)) {
     try {
       const params = new URLSearchParams({
         user: userAddress.toLowerCase(),
@@ -945,6 +1052,13 @@ export async function fetchUserActivity(
 
       if (options.side) {
         params.append('side', options.side);
+      }
+
+      if (typeof options.end === 'number' && Number.isFinite(options.end)) {
+        params.append('end', options.end.toString());
+      }
+      if (typeof options.start === 'number' && Number.isFinite(options.start)) {
+        params.append('start', options.start.toString());
       }
 
       console.log(`[API] Fetching activity offset ${offset} for user: ${userAddress}`);
@@ -993,6 +1107,12 @@ export async function fetchUserActivity(
       if (options.limit && allActivities.length >= options.limit) {
         break;
       }
+
+      // If next iteration would exceed the API offset cap, log and stop.
+      if (offset > maxOffset) {
+        console.warn(`[API] Hit Polymarket /activity offset cap (${maxOffset}); stopping after ${allActivities.length} records. To fetch older activity, narrow the query.`);
+        break;
+      }
     } catch (error) {
       console.error(`[API] Error fetching activity at offset ${offset}:`, error);
       if (allActivities.length === 0) {
@@ -1005,15 +1125,24 @@ export async function fetchUserActivity(
   console.log(`[API] Total activities fetched: ${allActivities.length}`);
   return allActivities;
 }
-export async function fetchAllTrades(
+/**
+ * Polymarket caps a single /trades query at 1500 records (limit=500 * 3 pages).
+ * For active wallets we walk further back in time using the `end` cursor.
+ */
+const TRADES_WINDOW_CAP = 1500;
+const MAX_TRADE_WINDOWS = 10; // up to ~15,000 trades
+
+async function fetchTradesWindow(
   userAddress: string,
   startDate?: string,
   endDate?: string
 ): Promise<PolymarketTrade[]> {
   const allTrades: PolymarketTrade[] = [];
   let page = 1;
-  const pageSize = 100;
-  const maxPages = 100; // Safety limit to prevent infinite loops (10,000 trades max)
+  // Polymarket /trades caps limit at 500 and offset at 1000 (Aug 26, 2025 changelog).
+  // pageSize 500 + maxPages 3 keeps us within both caps (offsets 0, 500, 1000) ~ 1500 trades.
+  const pageSize = 500;
+  const maxPages = 3;
   const seenIds = new Set<string>();
   let useMakerParam = false; // Track which parameter format works
   let consecutiveEmptyPages = 0; // Track consecutive pages with no new trades
@@ -1143,9 +1272,9 @@ export async function fetchAllTrades(
         break;
       }
 
-      // Safety check: If we've reached max pages
+      // Safety check: If we've reached max pages (Polymarket /trades offset cap)
       if (page >= maxPages) {
-        console.log(`[API] Reached maximum page limit (${maxPages}), stopping pagination`);
+        console.warn(`[API] Hit Polymarket /trades offset cap after ${allTrades.length} trades. To fetch older trades, narrow the date range.`);
         break;
       }
 
@@ -1161,13 +1290,69 @@ export async function fetchAllTrades(
     }
   }
 
-  console.log(`[API] Completed fetching trades: ${allTrades.length} total trades from ${page - 1} pages`);
+  console.log(`[API] Completed fetching trades window: ${allTrades.length} trades from ${page - 1} pages`);
 
   // Sort by timestamp ascending
   allTrades.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
   return allTrades;
 }
+
+/**
+ * Fetch all trades for a wallet, walking the API's offset-capped windows by
+ * stepping the `end` cursor backward when a window saturates. Each window
+ * yields up to TRADES_WINDOW_CAP records (1500); we walk up to MAX_TRADE_WINDOWS
+ * of them.
+ */
+export async function fetchAllTrades(
+  userAddress: string,
+  startDate?: string,
+  endDate?: string
+): Promise<PolymarketTrade[]> {
+  const allTrades: PolymarketTrade[] = [];
+  const seenIds = new Set<string>();
+  let currentEnd = endDate;
+  const startMs = startDate ? new Date(startDate).getTime() : -Infinity;
+
+  for (let windowIdx = 0; windowIdx < MAX_TRADE_WINDOWS; windowIdx++) {
+    const windowTrades = await fetchTradesWindow(userAddress, startDate, currentEnd);
+    if (windowTrades.length === 0) break;
+
+    let newCount = 0;
+    let earliestMs = Number.POSITIVE_INFINITY;
+    for (const trade of windowTrades) {
+      const id = trade.id || trade.hash || `${trade.timestamp}-${trade.user}-${trade.size}`;
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        allTrades.push(trade);
+        newCount++;
+      }
+      const ts = new Date(trade.timestamp).getTime();
+      if (Number.isFinite(ts) && ts < earliestMs) earliestMs = ts;
+    }
+
+    // If the window didn't fill, there's nothing older — done.
+    if (windowTrades.length < TRADES_WINDOW_CAP) break;
+    // If everything we got was a duplicate of the previous window, the
+    // boundary cursor isn't advancing — stop to avoid an infinite loop.
+    if (newCount === 0) break;
+    if (!Number.isFinite(earliestMs)) break;
+
+    // Step `end` back by 1 second past the earliest record to avoid refetching
+    // the boundary trade. The +/-1s slop is fine because /trades dedupes by id.
+    const nextEndMs = earliestMs - 1000;
+    if (nextEndMs <= startMs) break;
+    currentEnd = new Date(nextEndMs).toISOString();
+    console.log(`[API] Trade window ${windowIdx + 1} saturated (${windowTrades.length}); walking back to end=${currentEnd}`);
+  }
+
+  // Re-sort the merged set since concatenated windows may interleave.
+  allTrades.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+  console.log(`[API] Completed fetching trades: ${allTrades.length} total across ${MAX_TRADE_WINDOWS} max windows`);
+  return allTrades;
+}
+
 export function normalizeTrade(trade: PolymarketTrade, userAddress: string): NormalizedTrade {
   // Extract conditionId from various possible fields
   const conditionId = trade.conditionId || 
@@ -1229,38 +1414,45 @@ export async function fetchMarketMetadata(
   }
 
   try {
-    // Try to fetch market info from Gamma API
-    // Prefer slug-based lookup if available, as it might be more reliable
-    let response: Response | null = null;
-    let url = '';
-    
+    // Try to fetch market info from Gamma API.
+    // Polymarket flipped the default of GET /markets `closed` to `false` on Apr 9, 2026,
+    // so resolved markets are excluded unless we explicitly pass closed=true. Query
+    // closed=true first (most positions in PnL flows are settled), then fall back to
+    // closed=false for open markets.
+    let data: any = null;
+
+    const tryFetch = async (baseUrl: string): Promise<any | null> => {
+      for (const closedFlag of ['true', 'false']) {
+        const url = `${baseUrl}&closed=${closedFlag}`;
+        try {
+          const res = await fetchWithTimeout(url, {
+            headers: { 'Accept': 'application/json' },
+          }, 10000);
+          if (!res.ok) continue;
+          const body = await res.json();
+          // The /markets endpoint returns an array; only treat non-empty as a hit.
+          if (Array.isArray(body) ? body.length > 0 : body) {
+            return body;
+          }
+        } catch {
+          // Try next closedFlag
+        }
+      }
+      return null;
+    };
+
     if (slug) {
-      // Try slug-based endpoint first
-      url = `${GAMMA_API_BASE}/markets?slug=${encodeURIComponent(slug)}`;
-      try {
-        response = await fetchWithTimeout(url, {
-          headers: {
-            'Accept': 'application/json',
-          },
-        }, 10000);
-      } catch (e) {
-        console.log(`[fetchMarketMetadata] Slug endpoint failed for ${slug}, trying conditionId...`);
-        response = null;
+      data = await tryFetch(`${GAMMA_API_BASE}/markets?slug=${encodeURIComponent(slug)}`);
+      if (!data) {
+        console.log(`[fetchMarketMetadata] Slug lookup empty for ${slug}, trying conditionId...`);
       }
     }
-    
-    // Fallback to conditionId endpoint
-    if (!response || !response.ok) {
-      url = `${GAMMA_API_BASE}/markets?conditionId=${encodeURIComponent(conditionId)}`;
-      response = await fetchWithTimeout(url, {
-        headers: {
-          'Accept': 'application/json',
-        },
-      }, 10000);
+
+    if (!data) {
+      data = await tryFetch(`${GAMMA_API_BASE}/markets?conditionId=${encodeURIComponent(conditionId)}`);
     }
 
-    if (response.ok) {
-      const data = await response.json();
+    if (data) {
       
       // Handle different response formats
       let market: any = null;
@@ -1537,12 +1729,15 @@ export async function fetchMarketMetadata(
           console.log(`[fetchMarketMetadata] Extracted for ${conditionId}: category=${category}, tags=${JSON.stringify(tags)}`);
         }
         
+        const negRisk = market.negRisk === true || market.event?.negRisk === true || undefined;
+
         const metadata: MarketMetadata = {
           eventTitle: market.event?.title || market.eventTitle,
           marketTitle: market.question || market.title || market.marketTitle,
           outcomeName: outcome ? market.outcomes?.[parseInt(outcome)]?.name : undefined,
           category,
           tags,
+          negRisk,
         };
 
         marketMetadataCache.set(cacheKey, metadata);
@@ -1551,7 +1746,7 @@ export async function fetchMarketMetadata(
         console.log(`[fetchMarketMetadata] No market found in response for ${conditionId}`);
       }
     } else {
-      console.log(`[fetchMarketMetadata] API response not OK for ${conditionId}: ${response.status}`);
+      console.log(`[fetchMarketMetadata] No market found for ${conditionId} in either closed or open markets`);
     }
   } catch (error) {
     console.error(`Error fetching market metadata for ${conditionId}:`, error);
@@ -1596,6 +1791,144 @@ export async function enrichTradesWithMetadata(trades: NormalizedTrade[]): Promi
     return trade;
   });
 }
+/**
+ * Fetch the user's open positions from Polymarket's Data API.
+ * Returns each currently-held position with current price, unrealized PnL,
+ * and accrued realized PnL on that position.
+ *
+ * Endpoint: GET https://data-api.polymarket.com/positions?user=<addr>
+ */
+export async function fetchOpenPositions(userAddress: string): Promise<OpenPosition[]> {
+  const allPositions: OpenPosition[] = [];
+  let offset = 0;
+  const pageSize = 500;
+  const maxOffset = 1000; // Polymarket data-api offset cap (Aug 26, 2025)
+  const seenAssets = new Set<string>();
+
+  console.log(`[API] Fetching open positions for: ${userAddress}`);
+
+  while (offset <= maxOffset) {
+    try {
+      const params = new URLSearchParams({
+        user: userAddress.toLowerCase(),
+        limit: pageSize.toString(),
+        offset: offset.toString(),
+        sortBy: 'CURRENT',
+        sortDirection: 'DESC',
+      });
+
+      const response = await fetchWithTimeout(
+        `${DATA_API_BASE}/positions?${params.toString()}`,
+        { headers: { 'Accept': 'application/json' } },
+        15000
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => response.statusText);
+        if (allPositions.length === 0) {
+          throw new Error(`Failed to fetch open positions: ${response.status} ${errorText}`);
+        }
+        console.warn(`[API] /positions failed at offset ${offset}: ${response.status}`);
+        break;
+      }
+
+      const data: PolymarketOpenPosition[] = await response.json();
+      if (!Array.isArray(data) || data.length === 0) break;
+
+      for (const pos of data) {
+        // Some entries can come back with size 0 (fully closed). Skip those.
+        if (!pos || !pos.conditionId || (pos.size ?? 0) === 0) continue;
+
+        const dedupKey = `${pos.conditionId}:${pos.asset}`;
+        if (seenAssets.has(dedupKey)) continue;
+        seenAssets.add(dedupKey);
+
+        const outcome = pos.outcome || pos.asset?.split(':')?.[1] || '0';
+        const side: 'Long YES' | 'Long NO' = pos.outcomeIndex === 0 ? 'Long YES' : 'Long NO';
+
+        allPositions.push({
+          conditionId: pos.conditionId,
+          asset: pos.asset,
+          outcome,
+          outcomeName: pos.outcome,
+          side,
+          marketTitle: pos.title,
+          eventSlug: pos.eventSlug,
+          slug: pos.slug,
+          icon: pos.icon,
+          size: pos.size,
+          avgPrice: pos.avgPrice,
+          currentPrice: pos.curPrice,
+          initialValue: pos.initialValue,
+          currentValue: pos.currentValue,
+          unrealizedPnL: pos.cashPnl,
+          unrealizedPnLPercent: pos.percentPnl,
+          realizedPnL: pos.realizedPnl,
+          redeemable: pos.redeemable,
+          mergeable: pos.mergeable,
+          endDate: pos.endDate,
+          negRisk: pos.negRisk,
+        });
+      }
+
+      if (data.length < pageSize) break;
+      offset += pageSize;
+    } catch (error) {
+      console.error(`[API] Error fetching open positions at offset ${offset}:`, error);
+      if (allPositions.length === 0) throw error;
+      break;
+    }
+  }
+
+  console.log(`[API] Total open positions fetched: ${allPositions.length}`);
+  return allPositions;
+}
+
+/**
+ * Fetch NegRiskAdapter / CTF conditional-token operations for a wallet:
+ * CONVERSION (NegRisk NO->YES+USDC), REDEEM (post-resolution settlement),
+ * SPLIT (mint YES+NO from collateral), MERGE (burn YES+NO -> collateral).
+ *
+ * These don't appear in the /trades feed and are critical context for
+ * PnL on NegRisk events.
+ */
+export async function fetchUserConversionActivities(
+  userAddress: string,
+  types: NegRiskActivityType[] = ['CONVERSION', 'REDEEM']
+): Promise<NegRiskActivity[]> {
+  // Reuse the standard activity fetcher; it already respects the post-Aug-2025
+  // 1000 offset cap. A single sweep is enough for any realistic wallet.
+  const raw = await fetchUserActivity(userAddress, {
+    type: types,
+    sortBy: 'TIMESTAMP',
+    sortDirection: 'DESC',
+    limit: 500,
+  });
+
+  return raw
+    .map((r): NegRiskActivity | null => {
+      const t = (r.type || '').toUpperCase() as NegRiskActivityType;
+      if (!t || !['CONVERSION', 'REDEEM', 'SPLIT', 'MERGE'].includes(t)) return null;
+      const ts = typeof r.timestamp === 'number'
+        ? new Date(r.timestamp * 1000).toISOString()
+        : (r.timestamp || new Date().toISOString());
+      return {
+        type: t,
+        timestamp: ts,
+        conditionId: r.conditionId,
+        eventTitle: r.eventSlug || r.title,
+        marketTitle: r.title,
+        asset: r.asset,
+        size: typeof r.size === 'number' ? r.size : undefined,
+        usdcAmount: typeof r.usdcSize === 'number' ? r.usdcSize
+                    : typeof r.usdcAmount === 'number' ? r.usdcAmount
+                    : undefined,
+        raw: r,
+      };
+    })
+    .filter((x): x is NegRiskActivity => x !== null);
+}
+
 export async function fetchClosedPositions(
   userAddress: string,
   startDate?: string,
@@ -1712,6 +2045,7 @@ export async function fetchClosedPositions(
           // Don't use category/tags from closed-positions API - will be fetched from markets API
           category: undefined,
           tags: undefined,
+          negRisk: pos.negRisk,
         };
 
         // Filter by date range if provided (client-side filtering)

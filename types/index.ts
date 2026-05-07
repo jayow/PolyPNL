@@ -86,6 +86,7 @@ export interface ClosedPosition {
   icon?: string;
   category?: string; // Market category/tag
   tags?: string[]; // Array of tags/categories
+  negRisk?: boolean; // True for multi-outcome (NegRiskAdapter) markets
 }
 
 export interface PositionSummary {
@@ -108,6 +109,7 @@ export interface MarketMetadata {
   outcomeName?: string;
   category?: string; // Market category/tag (e.g., "pre-market", "swing", etc.)
   tags?: string[]; // Array of tags/categories
+  negRisk?: boolean; // True for multi-outcome (NegRiskAdapter) markets
 }
 
 // Polymarket API Response for closed positions
@@ -131,5 +133,86 @@ export interface PolymarketClosedPosition {
   endDate?: string;
   category?: string; // Category from API
   tags?: string[]; // Tags from API
+  negRisk?: boolean;
   [key: string]: any; // Allow additional fields from API
 }
+
+// Polymarket API Response for open positions (data-api.polymarket.com/positions)
+export interface PolymarketOpenPosition {
+  proxyWallet: string;
+  asset: string;
+  conditionId: string;
+  size: number;
+  avgPrice: number;
+  initialValue: number;
+  currentValue: number;
+  cashPnl: number;        // Unrealized PnL in USDC/pUSD
+  percentPnl: number;     // Unrealized PnL %
+  realizedPnl: number;    // Realized PnL accrued so far on this position
+  totalBought: number;
+  curPrice: number;
+  redeemable?: boolean;   // Can be redeemed via the conditional tokens contract
+  mergeable?: boolean;    // Has both YES and NO that can be merged 1:1 to USDC
+  title?: string;
+  slug?: string;
+  icon?: string;
+  eventSlug?: string;
+  outcome?: string;
+  outcomeIndex?: number;
+  endDate?: string;
+  negRisk?: boolean;
+  [key: string]: any;
+}
+
+export interface OpenPosition {
+  conditionId: string;
+  asset: string;
+  outcome: string;
+  outcomeName?: string;
+  side: 'Long YES' | 'Long NO';
+  marketTitle?: string;
+  eventSlug?: string;
+  slug?: string;
+  icon?: string;
+  size: number;
+  avgPrice: number;
+  currentPrice: number;
+  initialValue: number;
+  currentValue: number;
+  unrealizedPnL: number;
+  unrealizedPnLPercent: number;
+  realizedPnL: number;
+  redeemable?: boolean;
+  mergeable?: boolean;
+  endDate?: string;
+  negRisk?: boolean;
+}
+
+export interface OpenPositionsSummary {
+  totalCurrentValue: number;
+  totalCostBasis: number;
+  totalUnrealizedPnL: number;
+  totalUnrealizedPnLPercent: number;
+  positionsCount: number;
+  redeemableCount: number;
+}
+
+/**
+ * Conditional-token operation surfaced by the /activity endpoint. CONVERSION
+ * is the NegRiskAdapter NO->YES+USDC swap; REDEEM/SPLIT/MERGE come from the
+ * underlying CTF contract.
+ */
+export type NegRiskActivityType = 'CONVERSION' | 'REDEEM' | 'SPLIT' | 'MERGE';
+
+export interface NegRiskActivity {
+  type: NegRiskActivityType;
+  timestamp: string; // ISO
+  conditionId?: string;
+  eventTitle?: string;
+  marketTitle?: string;
+  asset?: string;
+  size?: number;
+  usdcAmount?: number;
+  raw: Record<string, any>; // Original API row, for debugging.
+}
+

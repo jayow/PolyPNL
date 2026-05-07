@@ -1,6 +1,7 @@
 'use client';
 
 import { ClosedPosition } from '@/types';
+import { shortOutcomeLabel } from '@/lib/position-display';
 
 // Canonical share card dimensions (16:9 landscape)
 export const SHARE_W = 840;
@@ -236,7 +237,7 @@ export default function ShareCard({ position, showDollarPnL = false, debug = fal
                   color: '#FFFFFF',
                 }}
               >
-                {position.side === 'Long YES' ? 'YES' : 'NO'}
+                {shortOutcomeLabel(position)}
               </span>
             </div>
           </div>

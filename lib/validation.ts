@@ -138,6 +138,26 @@ export const resolveQuerySchema = z.object({
 });
 
 /**
+ * Open positions API query parameters validation
+ * Accepts wallet address or username (same as PnL endpoint).
+ */
+export const positionsQuerySchema = z.object({
+  wallet: z
+    .string()
+    .min(1, 'Wallet parameter is required')
+    .refine(
+      (val) => {
+        const trimmed = val.trim().toLowerCase();
+        if (trimmed.startsWith('0x') && trimmed.length === 42) {
+          return walletAddressSchema.safeParse(trimmed).success;
+        }
+        return usernameSchema.safeParse(trimmed).success;
+      },
+      { message: 'Wallet must be a valid wallet address (0x...) or username' }
+    ),
+});
+
+/**
  * Resolve username API query parameters validation
  */
 export const resolveUsernameQuerySchema = z.object({
