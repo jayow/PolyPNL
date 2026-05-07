@@ -1,4 +1,4 @@
-import { PolymarketPublicProfile, PolymarketTrade, NormalizedTrade, MarketMetadata, PolymarketClosedPosition, ClosedPosition, PolymarketOpenPosition, OpenPosition } from '@/types';
+import { PolymarketPublicProfile, PolymarketTrade, NormalizedTrade, MarketMetadata, PolymarketClosedPosition, ClosedPosition, PolymarketOpenPosition, OpenPosition, NegRiskActivity, NegRiskActivityType } from '@/types';
 
 const GAMMA_API_BASE = 'https://gamma-api.polymarket.com';
 const DATA_API_BASE = 'https://data-api.polymarket.com';
@@ -1806,6 +1806,51 @@ export async function fetchOpenPositions(userAddress: string): Promise<OpenPosit
 
   console.log(`[API] Total open positions fetched: ${allPositions.length}`);
   return allPositions;
+}
+
+/**
+ * Fetch NegRiskAdapter / CTF conditional-token operations for a wallet:
+ * CONVERSION (NegRisk NO->YES+USDC), REDEEM (post-resolution settlement),
+ * SPLIT (mint YES+NO from collateral), MERGE (burn YES+NO -> collateral).
+ *
+ * These don't appear in the /trades feed and are critical context for
+ * PnL on NegRisk events.
+ */
+export async function fetchUserConversionActivities(
+  userAddress: string,
+  types: NegRiskActivityType[] = ['CONVERSION', 'REDEEM']
+): Promise<NegRiskActivity[]> {
+  // Reuse the standard activity fetcher; it already respects the post-Aug-2025
+  // 1000 offset cap. A single sweep is enough for any realistic wallet.
+  const raw = await fetchUserActivity(userAddress, {
+    type: types,
+    sortBy: 'TIMESTAMP',
+    sortDirection: 'DESC',
+    limit: 500,
+  });
+
+  return raw
+    .map((r): NegRiskActivity | null => {
+      const t = (r.type || '').toUpperCase() as NegRiskActivityType;
+      if (!t || !['CONVERSION', 'REDEEM', 'SPLIT', 'MERGE'].includes(t)) return null;
+      const ts = typeof r.timestamp === 'number'
+        ? new Date(r.timestamp * 1000).toISOString()
+        : (r.timestamp || new Date().toISOString());
+      return {
+        type: t,
+        timestamp: ts,
+        conditionId: r.conditionId,
+        eventTitle: r.eventSlug || r.title,
+        marketTitle: r.title,
+        asset: r.asset,
+        size: typeof r.size === 'number' ? r.size : undefined,
+        usdcAmount: typeof r.usdcSize === 'number' ? r.usdcSize
+                    : typeof r.usdcAmount === 'number' ? r.usdcAmount
+                    : undefined,
+        raw: r,
+      };
+    })
+    .filter((x): x is NegRiskActivity => x !== null);
 }
 
 export async function fetchClosedPositions(

@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ClosedPosition, PositionSummary, ProxyWalletResponse, OpenPosition, OpenPositionsSummary } from '@/types';
+import { ClosedPosition, PositionSummary, ProxyWalletResponse, OpenPosition, OpenPositionsSummary, NegRiskActivity } from '@/types';
 import OpenPositions from '@/components/OpenPositions';
 import NegRiskEventSummary from '@/components/NegRiskEventSummary';
+import ConversionsPanel from '@/components/ConversionsPanel';
 import { formatPositionLabel, sideBadgeClasses } from '@/lib/position-display';
 import { collateralAtTimestamp, collateralMix } from '@/lib/collateral';
 
@@ -23,6 +24,9 @@ function ResultsContent() {
   const [openSummary, setOpenSummary] = useState<OpenPositionsSummary | null>(null);
   const [openLoading, setOpenLoading] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
+  const [conversions, setConversions] = useState<NegRiskActivity[]>([]);
+  const [conversionsLoading, setConversionsLoading] = useState(false);
+  const [conversionsError, setConversionsError] = useState<string | null>(null);
 
   const wallet = searchParams.get('wallet') || '';
   const start = searchParams.get('start') || '';
@@ -36,8 +40,38 @@ function ResultsContent() {
 
     fetchPnL();
     fetchOpenPositions();
+    fetchConversions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wallet, start, end]);
+
+  const fetchConversions = async () => {
+    setConversionsLoading(true);
+    setConversionsError(null);
+    try {
+      const params = new URLSearchParams({ wallet });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const response = await fetch(`/api/conversions?${params.toString()}`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        throw new Error(errorData.error || errorData.details || `HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      setConversions(data.activities || []);
+    } catch (err) {
+      // Conversion data is supplementary; failure is silent.
+      const message = err instanceof Error
+        ? (err.name === 'AbortError' ? 'Request timed out' : err.message)
+        : 'Unknown error';
+      setConversionsError(message);
+      console.warn('[Frontend] Conversions fetch failed:', err);
+    } finally {
+      setConversionsLoading(false);
+    }
+  };
 
   const fetchOpenPositions = async () => {
     setOpenLoading(true);
@@ -309,6 +343,13 @@ function ResultsContent() {
 
         {/* NegRisk Event Roll-Up */}
         {positions.length > 0 && <NegRiskEventSummary positions={positions} />}
+
+        {/* Conditional-token activity (NegRisk conversions, redemptions) */}
+        <ConversionsPanel
+          activities={conversions}
+          loading={conversionsLoading}
+          error={conversionsError}
+        />
 
         {/* Summary Stats */}
         {summary && positions.length > 0 && (

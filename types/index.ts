@@ -196,3 +196,22 @@ export interface OpenPositionsSummary {
   positionsCount: number;
   redeemableCount: number;
 }
+
+/**
+ * Conditional-token operation surfaced by the /activity endpoint. CONVERSION
+ * is the NegRiskAdapter NO->YES+USDC swap; REDEEM/SPLIT/MERGE come from the
+ * underlying CTF contract.
+ */
+export type NegRiskActivityType = 'CONVERSION' | 'REDEEM' | 'SPLIT' | 'MERGE';
+
+export interface NegRiskActivity {
+  type: NegRiskActivityType;
+  timestamp: string; // ISO
+  conditionId?: string;
+  eventTitle?: string;
+  marketTitle?: string;
+  asset?: string;
+  size?: number;
+  usdcAmount?: number;
+  raw: Record<string, any>; // Original API row, for debugging.
+}

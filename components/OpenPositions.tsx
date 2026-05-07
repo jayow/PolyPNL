@@ -13,24 +13,8 @@ interface Props {
 }
 
 export default function OpenPositions({ positions, summary, loading, error }: Props) {
-  if (loading) {
-    return (
-      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-8">
-        <div className="text-sm text-gray-400">Loading open positions...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4 mb-8">
-        <p className="text-sm text-yellow-300">
-          <span className="font-semibold">Open positions unavailable:</span> {error}
-        </p>
-      </div>
-    );
-  }
-
+  // Hooks must run unconditionally on every render (rules-of-hooks); keep all
+  // useMemo / useLivePrices calls above any early returns below.
   const assetIds = useMemo(
     () => positions.map((p) => p.asset).filter((a): a is string => Boolean(a)),
     [positions]
@@ -59,8 +43,9 @@ export default function OpenPositions({ positions, summary, loading, error }: Pr
     });
   }, [positions, livePrices]);
 
-  const liveSummary = useMemo<OpenPositionsSummary>(() => {
-    if (!isLive) return summary!;
+  const liveSummary = useMemo<OpenPositionsSummary | null>(() => {
+    if (!summary) return null;
+    if (!isLive) return summary;
     const totalCurrentValue = livePositions.reduce((s, p) => s + (p.currentValue || 0), 0);
     const totalCostBasis = livePositions.reduce((s, p) => s + (p.initialValue || 0), 0);
     const totalUnrealizedPnL = livePositions.reduce((s, p) => s + (p.unrealizedPnL || 0), 0);
@@ -68,7 +53,7 @@ export default function OpenPositions({ positions, summary, loading, error }: Pr
       ? (totalUnrealizedPnL / totalCostBasis) * 100
       : 0;
     return {
-      ...summary!,
+      ...summary,
       totalCurrentValue,
       totalCostBasis,
       totalUnrealizedPnL,
@@ -76,7 +61,25 @@ export default function OpenPositions({ positions, summary, loading, error }: Pr
     };
   }, [isLive, livePositions, summary]);
 
-  if (!summary || positions.length === 0) {
+  if (loading) {
+    return (
+      <div className="bg-gray-800 rounded-lg p-6 border border-gray-700 mb-8">
+        <div className="text-sm text-gray-400">Loading open positions...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4 mb-8">
+        <p className="text-sm text-yellow-300">
+          <span className="font-semibold">Open positions unavailable:</span> {error}
+        </p>
+      </div>
+    );
+  }
+
+  if (!summary || !liveSummary || positions.length === 0) {
     return null;
   }
 
