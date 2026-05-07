@@ -1,7 +1,9 @@
 'use client';
 
+import { useMemo } from 'react';
 import { OpenPosition, OpenPositionsSummary } from '@/types';
 import { formatPositionLabel, sideBadgeClasses } from '@/lib/position-display';
+import { useLivePrices } from '@/lib/use-live-prices';
 
 interface Props {
   positions: OpenPosition[];
@@ -29,32 +31,88 @@ export default function OpenPositions({ positions, summary, loading, error }: Pr
     );
   }
 
+  const assetIds = useMemo(
+    () => positions.map((p) => p.asset).filter((a): a is string => Boolean(a)),
+    [positions]
+  );
+  const livePrices = useLivePrices(assetIds);
+  const isLive = Object.keys(livePrices).length > 0;
+
+  // Recompute current value / unrealized PnL using live mark prices when
+  // available, otherwise the polled REST snapshot.
+  const livePositions = useMemo(() => {
+    return positions.map((p) => {
+      const live = p.asset ? livePrices[p.asset] : undefined;
+      if (live === undefined) return p;
+      const currentValue = live * p.size;
+      const unrealizedPnL = currentValue - p.initialValue;
+      const unrealizedPnLPercent = p.initialValue > 0
+        ? (unrealizedPnL / p.initialValue) * 100
+        : 0;
+      return {
+        ...p,
+        currentPrice: live,
+        currentValue,
+        unrealizedPnL,
+        unrealizedPnLPercent,
+      };
+    });
+  }, [positions, livePrices]);
+
+  const liveSummary = useMemo<OpenPositionsSummary>(() => {
+    if (!isLive) return summary!;
+    const totalCurrentValue = livePositions.reduce((s, p) => s + (p.currentValue || 0), 0);
+    const totalCostBasis = livePositions.reduce((s, p) => s + (p.initialValue || 0), 0);
+    const totalUnrealizedPnL = livePositions.reduce((s, p) => s + (p.unrealizedPnL || 0), 0);
+    const totalUnrealizedPnLPercent = totalCostBasis > 0
+      ? (totalUnrealizedPnL / totalCostBasis) * 100
+      : 0;
+    return {
+      ...summary!,
+      totalCurrentValue,
+      totalCostBasis,
+      totalUnrealizedPnL,
+      totalUnrealizedPnLPercent,
+    };
+  }, [isLive, livePositions, summary]);
+
   if (!summary || positions.length === 0) {
     return null;
   }
 
   return (
     <section className="mb-8">
-      <h2 className="text-2xl font-bold mb-4 text-white">Open Positions</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold text-white">Open Positions</h2>
+        {isLive && (
+          <span className="flex items-center gap-2 text-xs text-green-300" title="Live mark prices via Polymarket market WebSocket">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400"></span>
+            </span>
+            Live
+          </span>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <Card label="Open Positions" value={summary.positionsCount.toString()} />
-        <Card label="Current Value" value={`$${summary.totalCurrentValue.toFixed(2)}`} />
+        <Card label="Open Positions" value={liveSummary.positionsCount.toString()} />
+        <Card label="Current Value" value={`$${liveSummary.totalCurrentValue.toFixed(2)}`} />
         <Card
           label="Unrealized PnL"
-          value={`$${summary.totalUnrealizedPnL.toFixed(2)}`}
-          tone={summary.totalUnrealizedPnL >= 0 ? 'positive' : 'negative'}
+          value={`$${liveSummary.totalUnrealizedPnL.toFixed(2)}`}
+          tone={liveSummary.totalUnrealizedPnL >= 0 ? 'positive' : 'negative'}
         />
         <Card
           label="Unrealized %"
-          value={`${summary.totalUnrealizedPnLPercent.toFixed(2)}%`}
-          tone={summary.totalUnrealizedPnLPercent >= 0 ? 'positive' : 'negative'}
+          value={`${liveSummary.totalUnrealizedPnLPercent.toFixed(2)}%`}
+          tone={liveSummary.totalUnrealizedPnLPercent >= 0 ? 'positive' : 'negative'}
         />
       </div>
 
-      {summary.redeemableCount > 0 && (
+      {liveSummary.redeemableCount > 0 && (
         <div className="bg-blue-900/30 border border-blue-700 rounded-lg p-3 mb-4 text-sm text-blue-200">
-          {summary.redeemableCount} position{summary.redeemableCount === 1 ? ' is' : 's are'} redeemable on-chain
+          {liveSummary.redeemableCount} position{liveSummary.redeemableCount === 1 ? ' is' : 's are'} redeemable on-chain
           (the underlying market has resolved).
         </div>
       )}
@@ -76,7 +134,7 @@ export default function OpenPositions({ positions, summary, loading, error }: Pr
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700">
-              {positions.map((pos, idx) => (
+              {livePositions.map((pos, idx) => (
                 <tr key={`${pos.conditionId}:${pos.asset}-${idx}`} className="hover:bg-gray-750 transition-colors">
                   <td className="px-4 py-3 text-sm text-gray-300 max-w-xs truncate">
                     <div className="flex items-center gap-2">
