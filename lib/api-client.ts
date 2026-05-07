@@ -36,9 +36,16 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout:
 }
 
 /**
- * Fetch username and profile details from Polymarket profile page
+ * Fetch username and profile details for a wallet.
+ *
+ * Primary path: Gamma `/public-profile?address=...` — the supported API that
+ * already returns username + profileImage. Most lookups should resolve here.
+ *
+ * Fallback path (when the API has no record yet, e.g. fresh wallets):
+ * scrape polymarket.com/@<address>. The scraping path is fragile and only
+ * runs when the structured API doesn't carry the data we need.
+ *
  * @param address - Wallet address (can be EOA or proxy wallet)
- * @returns Profile information including username
  */
 export async function fetchPolymarketUsername(address: string): Promise<{
   address: string;
@@ -51,8 +58,37 @@ export async function fetchPolymarketUsername(address: string): Promise<{
   const normalizedAddress = address.toLowerCase().trim();
   const profileUrl = `https://polymarket.com/@${normalizedAddress}`;
 
+  // Primary path — Gamma public-profile API.
   try {
-    console.log(`[fetchPolymarketUsername] Fetching profile for: ${normalizedAddress}`);
+    const apiResponse = await fetchWithTimeout(
+      `${GAMMA_API_BASE}/public-profile?address=${encodeURIComponent(normalizedAddress)}`,
+      { headers: { 'Accept': 'application/json' } },
+      8000
+    );
+    if (apiResponse.ok) {
+      const data: PolymarketPublicProfile & Record<string, any> = await apiResponse.json();
+      const username = data?.username || data?.displayName || data?.name || null;
+      const avatarUrl = data?.profileImage || null;
+      const displayName = data?.displayName || data?.name || null;
+      const bio = data?.bio || null;
+      if (username || avatarUrl || displayName || bio) {
+        console.log(`[fetchPolymarketUsername] Resolved via Gamma /public-profile for ${normalizedAddress} (username=${username})`);
+        return {
+          address: normalizedAddress,
+          username,
+          displayName,
+          profileUrl,
+          bio,
+          avatarUrl,
+        };
+      }
+    }
+  } catch (apiError) {
+    console.log(`[fetchPolymarketUsername] Gamma /public-profile lookup failed for ${normalizedAddress}; falling back to scrape:`, apiError);
+  }
+
+  try {
+    console.log(`[fetchPolymarketUsername] Falling back to HTML scrape for: ${normalizedAddress}`);
     
     const response = await fetchWithTimeout(
       profileUrl,
