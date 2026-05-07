@@ -1044,7 +1044,12 @@ export async function fetchUserActivity(
       });
 
       // Only add type filter if provided and not empty
-      // If no type filter, API should return all activity types
+      // If no type filter, API should return all activity types.
+      //
+      // GOTCHA: Polymarket's /activity silently honors only the FIRST `type=`
+      // query parameter and drops the rest. type=CONVERSION&type=REDEEM
+      // returns CONVERSION rows only. To fetch multiple types, call this
+      // function once per type and merge — see fetchUserConversionActivities.
       if (options.type && options.type.length > 0) {
         options.type.forEach(t => params.append('type', t));
       }
@@ -1926,32 +1931,55 @@ export async function fetchOpenPositions(userAddress: string): Promise<OpenPosit
  *
  * These don't appear in the /trades feed and are critical context for
  * PnL on NegRisk events.
+ *
+ * NOTE: Polymarket's /activity endpoint silently ignores all but the first
+ * `type=` query parameter — passing type=CONVERSION&type=REDEEM returns only
+ * CONVERSION rows. Workaround is to query each type independently and merge,
+ * which is what we do here.
  */
 export async function fetchUserConversionActivities(
   userAddress: string,
   types: NegRiskActivityType[] = ['CONVERSION', 'REDEEM']
 ): Promise<NegRiskActivity[]> {
-  // Reuse the standard activity fetcher; it already respects the post-Aug-2025
-  // 1000 offset cap. A single sweep is enough for any realistic wallet.
-  const raw = await fetchUserActivity(userAddress, {
-    type: types,
-    sortBy: 'TIMESTAMP',
-    sortDirection: 'DESC',
-    limit: 500,
-  });
+  const perTypeResults = await Promise.all(
+    types.map((t) =>
+      fetchUserActivity(userAddress, {
+        type: [t],
+        sortBy: 'TIMESTAMP',
+        sortDirection: 'DESC',
+        limit: 500,
+      }).catch((err) => {
+        console.warn(`[API] Activity fetch failed for type=${t}:`, err);
+        return [] as any[];
+      })
+    )
+  );
 
-  return raw
-    .map((r): NegRiskActivity | null => {
+  const seen = new Set<string>();
+  const merged: NegRiskActivity[] = [];
+
+  for (const rows of perTypeResults) {
+    for (const r of rows) {
       const t = (r.type || '').toUpperCase() as NegRiskActivityType;
-      if (!t || !['CONVERSION', 'REDEEM', 'SPLIT', 'MERGE'].includes(t)) return null;
+      if (!t || !['CONVERSION', 'REDEEM', 'SPLIT', 'MERGE'].includes(t)) continue;
+
+      // Dedup on the strongest unique signal we have. transactionHash usually
+      // exists, but some old rows may lack it; fall back to a composite key.
+      const key = r.transactionHash
+        ? `${t}:${r.transactionHash}:${r.asset || r.conditionId || ''}`
+        : `${t}:${r.timestamp}:${r.conditionId || ''}:${r.asset || ''}:${r.usdcSize || 0}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
       const ts = typeof r.timestamp === 'number'
         ? new Date(r.timestamp * 1000).toISOString()
         : (r.timestamp || new Date().toISOString());
-      return {
+
+      merged.push({
         type: t,
         timestamp: ts,
         conditionId: r.conditionId,
-        eventTitle: r.eventSlug || r.title,
+        eventTitle: r.title || r.eventSlug,
         marketTitle: r.title,
         asset: r.asset,
         size: typeof r.size === 'number' ? r.size : undefined,
@@ -1959,9 +1987,13 @@ export async function fetchUserConversionActivities(
                     : typeof r.usdcAmount === 'number' ? r.usdcAmount
                     : undefined,
         raw: r,
-      };
-    })
-    .filter((x): x is NegRiskActivity => x !== null);
+      });
+    }
+  }
+
+  // Sort newest first.
+  merged.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  return merged;
 }
 
 export async function fetchClosedPositions(
