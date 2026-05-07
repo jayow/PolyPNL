@@ -179,7 +179,7 @@ export default function Table({
                           if (url !== '#') window.open(url, '_blank');
                         }}
                       >
-                        {marketDisplayTitle(pos) || '-'}
+                        {pos.marketTitle || '-'}
                       </span>
                     ) : (
                       <span className="truncate">-</span>
