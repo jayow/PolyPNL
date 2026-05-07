@@ -1239,38 +1239,45 @@ export async function fetchMarketMetadata(
   }
 
   try {
-    // Try to fetch market info from Gamma API
-    // Prefer slug-based lookup if available, as it might be more reliable
-    let response: Response | null = null;
-    let url = '';
-    
+    // Try to fetch market info from Gamma API.
+    // Polymarket flipped the default of GET /markets `closed` to `false` on Apr 9, 2026,
+    // so resolved markets are excluded unless we explicitly pass closed=true. Query
+    // closed=true first (most positions in PnL flows are settled), then fall back to
+    // closed=false for open markets.
+    let data: any = null;
+
+    const tryFetch = async (baseUrl: string): Promise<any | null> => {
+      for (const closedFlag of ['true', 'false']) {
+        const url = `${baseUrl}&closed=${closedFlag}`;
+        try {
+          const res = await fetchWithTimeout(url, {
+            headers: { 'Accept': 'application/json' },
+          }, 10000);
+          if (!res.ok) continue;
+          const body = await res.json();
+          // The /markets endpoint returns an array; only treat non-empty as a hit.
+          if (Array.isArray(body) ? body.length > 0 : body) {
+            return body;
+          }
+        } catch {
+          // Try next closedFlag
+        }
+      }
+      return null;
+    };
+
     if (slug) {
-      // Try slug-based endpoint first
-      url = `${GAMMA_API_BASE}/markets?slug=${encodeURIComponent(slug)}`;
-      try {
-        response = await fetchWithTimeout(url, {
-          headers: {
-            'Accept': 'application/json',
-          },
-        }, 10000);
-      } catch (e) {
-        console.log(`[fetchMarketMetadata] Slug endpoint failed for ${slug}, trying conditionId...`);
-        response = null;
+      data = await tryFetch(`${GAMMA_API_BASE}/markets?slug=${encodeURIComponent(slug)}`);
+      if (!data) {
+        console.log(`[fetchMarketMetadata] Slug lookup empty for ${slug}, trying conditionId...`);
       }
     }
-    
-    // Fallback to conditionId endpoint
-    if (!response || !response.ok) {
-      url = `${GAMMA_API_BASE}/markets?conditionId=${encodeURIComponent(conditionId)}`;
-      response = await fetchWithTimeout(url, {
-        headers: {
-          'Accept': 'application/json',
-        },
-      }, 10000);
+
+    if (!data) {
+      data = await tryFetch(`${GAMMA_API_BASE}/markets?conditionId=${encodeURIComponent(conditionId)}`);
     }
 
-    if (response.ok) {
-      const data = await response.json();
+    if (data) {
       
       // Handle different response formats
       let market: any = null;
@@ -1561,7 +1568,7 @@ export async function fetchMarketMetadata(
         console.log(`[fetchMarketMetadata] No market found in response for ${conditionId}`);
       }
     } else {
-      console.log(`[fetchMarketMetadata] API response not OK for ${conditionId}: ${response.status}`);
+      console.log(`[fetchMarketMetadata] No market found for ${conditionId} in either closed or open markets`);
     }
   } catch (error) {
     console.error(`Error fetching market metadata for ${conditionId}:`, error);
