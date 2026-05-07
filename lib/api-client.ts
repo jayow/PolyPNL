@@ -922,11 +922,13 @@ export async function fetchUserActivity(
   const allActivities: any[] = [];
   let offset = 0;
   const pageSize = Math.min(options.limit || 100, 500); // API max is 500
-  const maxOffset = 10000; // API max offset
+  // Polymarket API hard caps offset at 1000 (Aug 26, 2025 changelog).
+  // With pageSize=500, that means at most 3 calls (offsets 0, 500, 1000) ~ 1500 records.
+  const maxOffset = 1000;
 
   console.log(`[API] Fetching user activity for: ${userAddress}`, options);
 
-  while (offset < maxOffset && (!options.limit || allActivities.length < options.limit)) {
+  while (offset <= maxOffset && (!options.limit || allActivities.length < options.limit)) {
     try {
       const params = new URLSearchParams({
         user: userAddress.toLowerCase(),
@@ -993,6 +995,12 @@ export async function fetchUserActivity(
       if (options.limit && allActivities.length >= options.limit) {
         break;
       }
+
+      // If next iteration would exceed the API offset cap, log and stop.
+      if (offset > maxOffset) {
+        console.warn(`[API] Hit Polymarket /activity offset cap (${maxOffset}); stopping after ${allActivities.length} records. To fetch older activity, narrow the query.`);
+        break;
+      }
     } catch (error) {
       console.error(`[API] Error fetching activity at offset ${offset}:`, error);
       if (allActivities.length === 0) {
@@ -1012,8 +1020,10 @@ export async function fetchAllTrades(
 ): Promise<PolymarketTrade[]> {
   const allTrades: PolymarketTrade[] = [];
   let page = 1;
-  const pageSize = 100;
-  const maxPages = 100; // Safety limit to prevent infinite loops (10,000 trades max)
+  // Polymarket /trades caps limit at 500 and offset at 1000 (Aug 26, 2025 changelog).
+  // pageSize 500 + maxPages 3 keeps us within both caps (offsets 0, 500, 1000) ~ 1500 trades.
+  const pageSize = 500;
+  const maxPages = 3;
   const seenIds = new Set<string>();
   let useMakerParam = false; // Track which parameter format works
   let consecutiveEmptyPages = 0; // Track consecutive pages with no new trades
@@ -1143,9 +1153,9 @@ export async function fetchAllTrades(
         break;
       }
 
-      // Safety check: If we've reached max pages
+      // Safety check: If we've reached max pages (Polymarket /trades offset cap)
       if (page >= maxPages) {
-        console.log(`[API] Reached maximum page limit (${maxPages}), stopping pagination`);
+        console.warn(`[API] Hit Polymarket /trades offset cap after ${allTrades.length} trades. To fetch older trades, narrow the date range.`);
         break;
       }
 
